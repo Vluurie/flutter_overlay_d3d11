@@ -40,7 +40,7 @@ impl FlutterOverlay {
         height: u32,
         pixel_ratio: f64,
     ) -> Result<FlutterViewId, FlutterEmbedderError> {
-        self.add_view_inner(game_device, Some(hwnd), width, height, pixel_ratio)
+        self.add_view_inner(game_device, Some(hwnd), width, height, pixel_ratio, true)
     }
 
     /// Add an offscreen Flutter view: renders into a game-readable D3D11 texture
@@ -54,7 +54,7 @@ impl FlutterOverlay {
         height: u32,
         pixel_ratio: f64,
     ) -> Result<FlutterViewId, FlutterEmbedderError> {
-        self.add_view_inner(game_device, None, width, height, pixel_ratio)
+        self.add_view_inner(game_device, None, width, height, pixel_ratio, false)
     }
 
     fn add_view_inner(
@@ -64,6 +64,7 @@ impl FlutterOverlay {
         width: u32,
         height: u32,
         pixel_ratio: f64,
+        blocking: bool,
     ) -> Result<FlutterViewId, FlutterEmbedderError> {
         if self.engine.0.is_null() {
             return Err(FlutterEmbedderError::EngineNotRunning);
@@ -157,6 +158,25 @@ impl FlutterOverlay {
             display_id: 0,
             view_id,
         };
+
+        if !blocking {
+            let info = FlutterAddViewInfo {
+                struct_size: std::mem::size_of::<FlutterAddViewInfo>(),
+                view_id,
+                view_metrics: &metrics,
+                user_data: std::ptr::null_mut(),
+                add_view_callback: Some(add_view_noop_callback),
+            };
+            let result = unsafe { (self.engine_dll.FlutterEngineAddView)(self.engine.0, &info) };
+            if result != e::FlutterEngineResult_kSuccess {
+                self.view_registry.remove(view_id);
+                return Err(FlutterEmbedderError::OperationFailed(format!(
+                    "FlutterEngineAddView failed to start: {result:?}"
+                )));
+            }
+            info!("[multiview] added offscreen view {view_id} ({width}x{height})");
+            return Ok(view_id);
+        }
 
         let sync = Box::new(AddViewSync {
             done: std::sync::atomic::AtomicBool::new(false),
@@ -440,6 +460,8 @@ extern "C" fn add_view_callback(result: *const FlutterAddViewResult) {
     sync.added.store(result.added, Ordering::Release);
     sync.done.store(true, Ordering::Release);
 }
+
+extern "C" fn add_view_noop_callback(_result: *const FlutterAddViewResult) {}
 
 extern "C" fn remove_view_callback(result: *const FlutterRemoveViewResult) {
     if result.is_null() {

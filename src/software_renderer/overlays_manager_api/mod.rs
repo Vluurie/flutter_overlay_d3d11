@@ -1382,6 +1382,9 @@ impl FlutterOverlayManagerHandle {
             if overlay.is_visible() && overlay.has_first_frame() {
                 overlay.reopen_shared_texture_if_needed(&context);
                 overlay.tick(&context);
+                for view_id in overlay.secondary_view_ids() {
+                    overlay.tick_view(view_id, &context);
+                }
                 update_interactive_widget_hover_state(overlay);
 
                 if overlay.effect_frames_remaining > 0 {
