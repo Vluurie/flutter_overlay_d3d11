@@ -24,14 +24,20 @@ fn satellite_texture_converges_to_resized_dimensions() {
         let sat_hwnd = window_hwnd(&window);
         resize_window_client_area(sat_hwnd, 1920, 1080);
         let target = client_size(sat_hwnd);
-        step(&format!("resized; actual client size={}x{}", target.0, target.1));
+        step(&format!(
+            "resized; actual client size={}x{}",
+            target.0, target.1
+        ));
         assert!(
             target.0 >= 1900 && target.1 >= 1000,
             "window did not actually grow: client size {target:?}"
         );
 
         let converged = h.wait_for_texture_size(view_id, target, Duration::from_secs(5));
-        step(&format!("converged to {}x{}={converged}", target.0, target.1));
+        step(&format!(
+            "converged to {}x{}={converged}",
+            target.0, target.1
+        ));
 
         h.close_window(window);
         assert!(

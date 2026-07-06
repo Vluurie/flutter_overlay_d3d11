@@ -40,24 +40,50 @@ impl FlutterOverlay {
         height: u32,
         pixel_ratio: f64,
     ) -> Result<FlutterViewId, FlutterEmbedderError> {
+        self.add_view_inner(game_device, Some(hwnd), width, height, pixel_ratio)
+    }
+
+    /// Add an offscreen Flutter view: renders into a game-readable D3D11 texture
+    /// with no OS window (no window-control channel, null HWND). The game reads
+    /// its `view_texture_srv` and draws it as a native UI layer. Requires the
+    /// OpenGL renderer + compositor, so it must run on the main overlay.
+    pub fn add_offscreen_view(
+        &mut self,
+        game_device: &ID3D11Device,
+        width: u32,
+        height: u32,
+        pixel_ratio: f64,
+    ) -> Result<FlutterViewId, FlutterEmbedderError> {
+        self.add_view_inner(game_device, None, width, height, pixel_ratio)
+    }
+
+    fn add_view_inner(
+        &mut self,
+        game_device: &ID3D11Device,
+        hwnd: Option<HWND>,
+        width: u32,
+        height: u32,
+        pixel_ratio: f64,
+    ) -> Result<FlutterViewId, FlutterEmbedderError> {
         if self.engine.0.is_null() {
             return Err(FlutterEmbedderError::EngineNotRunning);
         }
         if self.renderer_type != RendererType::OpenGL || !self.compositor_active {
             return Err(FlutterEmbedderError::OperationFailed(
-                "add_window_view requires the OpenGL renderer with the compositor active"
-                    .to_string(),
+                "add_view requires the OpenGL renderer with the compositor active".to_string(),
             ));
         }
         if width == 0 || height == 0 {
             return Err(FlutterEmbedderError::OperationFailed(
-                "add_window_view: width/height must be non-zero".to_string(),
+                "add_view: width/height must be non-zero".to_string(),
             ));
         }
 
-        self.register_channel_handler(WINDOW_CONTROL_CHANNEL, |payload| {
-            handle_window_control_message(&payload)
-        });
+        if hwnd.is_some() {
+            self.register_channel_handler(WINDOW_CONTROL_CHANNEL, |payload| {
+                handle_window_control_message(&payload)
+            });
+        }
 
         let angle_device = match &self.angle_state {
             Some(s) => s.0.get_d3d_device().map_err(|e| {
@@ -94,7 +120,7 @@ impl FlutterOverlay {
         let view_id = self.view_registry.allocate_id();
         let surface = ViewSurface {
             view_id,
-            hwnd: SendHwnd(hwnd),
+            hwnd: SendHwnd(hwnd.unwrap_or_default()),
             width,
             height,
             texture_size: (width, height),

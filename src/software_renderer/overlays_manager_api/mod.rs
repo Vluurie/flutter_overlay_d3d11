@@ -153,6 +153,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::Result as WindowsResult;
 
+use crate::bindings::embedder::FlutterViewId;
 use crate::init_logging;
 use crate::software_renderer::api::{FlutterEmbedderError, OverlayCreateParams};
 use crate::software_renderer::d3d11_compositor::effects::{
@@ -214,9 +215,9 @@ fn get_overlay_manager() -> Option<&'static Mutex<OverlayManager>> {
 }
 
 mod keybind;
-mod types;
 #[cfg(test)]
 mod tests;
+mod types;
 use keybind::{Keybind, parse_keybind};
 pub use keybind::{KeybindCallback, VisibilityToggleCallback};
 pub use types::{FlutterRenderPass, FontAtlasSpec};
@@ -365,6 +366,78 @@ impl OverlayManager {
         // address is stable for as long as the entry exists. The caller must not
         // remove/shutdown this overlay while the satellite window is open.
         unsafe { overlay.spawn_window(&game_device, spec) }
+    }
+
+    /// Add an offscreen Flutter view (no OS window) to the given overlay and
+    /// return its view id. The game reads the view's texture via
+    /// `offscreen_view_srvs` and draws it as a native UI layer.
+    pub fn add_offscreen_view_for_overlay(
+        &mut self,
+        identifier: Option<&str>,
+        width: u32,
+        height: u32,
+        pixel_ratio: f64,
+    ) -> Result<FlutterViewId, FlutterEmbedderError> {
+        let swap_chain = self.swap_chain.as_ref().ok_or_else(|| {
+            FlutterEmbedderError::OperationFailed(
+                "OverlayManager has no swap chain; cannot derive game device".to_string(),
+            )
+        })?;
+        let game_device: ID3D11Device = unsafe { swap_chain.GetDevice() }.map_err(|e| {
+            FlutterEmbedderError::OperationFailed(format!("swap_chain.GetDevice failed: {e}"))
+        })?;
+
+        let overlay = self
+            .get_instance_mut(identifier)
+            .map_err(FlutterEmbedderError::OperationFailed)?;
+
+        overlay.add_offscreen_view(&game_device, width, height, pixel_ratio)
+    }
+
+    /// Returns `(view_id, srv)` for every secondary view on the given overlay,
+    /// sorted by ascending view id. Ids are allocated monotonically, so the sort
+    /// makes the surface->layer mapping deterministic across frames.
+    pub fn offscreen_view_srvs(
+        &self,
+        identifier: Option<&str>,
+    ) -> Vec<(FlutterViewId, ID3D11ShaderResourceView)> {
+        let Ok(overlay) = self.get_instance(identifier) else {
+            return Vec::new();
+        };
+        let mut out: Vec<(FlutterViewId, ID3D11ShaderResourceView)> = overlay
+            .secondary_view_ids()
+            .into_iter()
+            .filter_map(|id| overlay.view_texture_srv(id).map(|srv| (id, srv)))
+            .collect();
+        out.sort_by_key(|(id, _)| *id);
+        out
+    }
+
+    /// Re-metrics an offscreen view to a new size (invalidates its SRV).
+    pub fn resize_offscreen_view(
+        &mut self,
+        identifier: Option<&str>,
+        view_id: FlutterViewId,
+        width: u32,
+        height: u32,
+        pixel_ratio: f64,
+    ) -> Result<(), FlutterEmbedderError> {
+        let overlay = self
+            .get_instance_mut(identifier)
+            .map_err(FlutterEmbedderError::OperationFailed)?;
+        overlay.resize_view(view_id, width, height, pixel_ratio)
+    }
+
+    /// Removes an offscreen view from the engine.
+    pub fn remove_offscreen_view(
+        &mut self,
+        identifier: Option<&str>,
+        view_id: FlutterViewId,
+    ) -> Result<(), FlutterEmbedderError> {
+        let overlay = self
+            .get_instance_mut(identifier)
+            .map_err(FlutterEmbedderError::OperationFailed)?;
+        overlay.remove_view(view_id)
     }
 
     /// Retrieves the dimensions (width, height) for all active overlays.
@@ -1143,6 +1216,53 @@ impl FlutterOverlayManagerHandle {
         } else {
             false
         }
+    }
+
+    /// Add an offscreen Flutter view (no OS window) to an overlay; returns its
+    /// view id. See `OverlayManager::add_offscreen_view_for_overlay`.
+    pub fn add_offscreen_view(
+        &self,
+        identifier: Option<&str>,
+        width: u32,
+        height: u32,
+        pixel_ratio: f64,
+    ) -> Result<FlutterViewId, FlutterEmbedderError> {
+        self.manager
+            .lock()
+            .add_offscreen_view_for_overlay(identifier, width, height, pixel_ratio)
+    }
+
+    /// `(view_id, srv)` for every secondary view on an overlay, sorted by id.
+    pub fn offscreen_view_srvs(
+        &self,
+        identifier: Option<&str>,
+    ) -> Vec<(FlutterViewId, ID3D11ShaderResourceView)> {
+        self.manager.lock().offscreen_view_srvs(identifier)
+    }
+
+    /// Re-metrics an offscreen view to a new size.
+    pub fn resize_offscreen_view(
+        &self,
+        identifier: Option<&str>,
+        view_id: FlutterViewId,
+        width: u32,
+        height: u32,
+        pixel_ratio: f64,
+    ) -> Result<(), FlutterEmbedderError> {
+        self.manager
+            .lock()
+            .resize_offscreen_view(identifier, view_id, width, height, pixel_ratio)
+    }
+
+    /// Removes an offscreen view from the engine.
+    pub fn remove_offscreen_view(
+        &self,
+        identifier: Option<&str>,
+        view_id: FlutterViewId,
+    ) -> Result<(), FlutterEmbedderError> {
+        self.manager
+            .lock()
+            .remove_offscreen_view(identifier, view_id)
     }
 
     /// Renders all latched 3D primitives for all visible overlays.
