@@ -1,4 +1,4 @@
-# Flutter Rust Windows Embedder
+# Flutter Overlay D3D11
 
 Host a Flutter app on Windows from your own Rust process. You link this crate,
 load the Flutter engine at runtime, and drive it yourself. Two ways to use it:
