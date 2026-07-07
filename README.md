@@ -122,7 +122,7 @@ See the standalone section below.)
 
 ```toml
 [dependencies]
-flutter_rust_windows_embedder = { git = "https://github.com/Vluurie/flutter-rust-windows-embedder.git", branch = "master" }
+flutter_rust_windows_embedder = { git = "https://github.com/Vluurie/flutter_overlay_d3d11.git", branch = "master" }
 ```
 
 ---
