@@ -23,6 +23,7 @@ use crate::bindings::embedder::{
 
 use crate::software_renderer::dynamic_flutter_engine_dll_loader::FlutterEngineDll;
 use crate::software_renderer::overlay::overlay_impl::FlutterOverlay;
+use crate::software_renderer::overlays_manager_api::{POINTER_BUTTONS, POINTER_POS};
 
 pub fn handle_pointer_event(
     overlay: &FlutterOverlay,
@@ -70,6 +71,7 @@ pub fn handle_pointer_event(
                 .mouse_buttons_state
                 .store(current_buttons_state, Ordering::Relaxed);
             send_pointer_event_to_flutter(
+                overlay,
                 engine.0,
                 engine_dll,
                 PointerSample {
@@ -102,6 +104,7 @@ pub fn handle_pointer_event(
             if !overlay.is_mouse_added.load(Ordering::SeqCst) {
                 overlay.is_mouse_added.store(true, Ordering::SeqCst);
                 send_pointer_event_to_flutter(
+                    overlay,
                     engine.0,
                     engine_dll,
                     PointerSample {
@@ -116,6 +119,7 @@ pub fn handle_pointer_event(
             }
 
             send_pointer_event_to_flutter(
+                overlay,
                 engine.0,
                 engine_dll,
                 PointerSample {
@@ -147,6 +151,7 @@ pub fn handle_pointer_event(
                 .store(current_buttons_state, Ordering::Relaxed);
 
             send_pointer_event_to_flutter(
+                overlay,
                 engine.0,
                 engine_dll,
                 PointerSample {
@@ -164,6 +169,7 @@ pub fn handle_pointer_event(
             if overlay.is_mouse_added.load(Ordering::SeqCst) {
                 overlay.is_mouse_added.store(false, Ordering::SeqCst);
                 send_pointer_event_to_flutter(
+                    overlay,
                     engine.0,
                     engine_dll,
                     PointerSample {
@@ -199,6 +205,7 @@ pub fn handle_pointer_event(
             let scroll_delta_y_flutter = -(wheel_delta as f64 / WHEEL_DELTA as f64) * 20.0;
 
             send_pointer_event_to_flutter(
+                overlay,
                 engine.0,
                 engine_dll,
                 PointerSample {
@@ -276,10 +283,17 @@ struct PointerSample {
 }
 
 fn send_pointer_event_to_flutter(
+    overlay: &FlutterOverlay,
     engine: FlutterEngine,
     engine_dll: &FlutterEngineDll,
     sample: PointerSample,
 ) {
+    POINTER_POS.store(
+        (((sample.x as f32).to_bits() as u64) << 32) | (sample.y as f32).to_bits() as u64,
+        std::sync::atomic::Ordering::Release,
+    );
+    POINTER_BUTTONS.store(sample.buttons, std::sync::atomic::Ordering::Release);
+    send_pointer_to_secondary_views(overlay, &sample);
     let PointerSample {
         phase,
         x,
@@ -318,5 +332,56 @@ fn send_pointer_event_to_flutter(
 
         let _res: FlutterEngineResult =
             (engine_dll.FlutterEngineSendPointerEvent)(engine, &event as *const _, 1);
+    }
+}
+
+/// Send the same pointer sample to every secondary (offscreen) view, offsetting
+/// screen coords into each view's local space via its registered screen rect.
+fn send_pointer_to_secondary_views(overlay: &FlutterOverlay, sample: &PointerSample) {
+    let engine = overlay.engine.0;
+    if engine.is_null() {
+        return;
+    }
+    let dll = &overlay.engine_dll;
+    let sids = overlay.secondary_view_ids();
+    for view_id in sids {
+        let Some((rx, ry, rw, rh)) = overlay.view_screen_rect(view_id) else {
+            continue;
+        };
+        if sample.x < rx as f64
+            || sample.y < ry as f64
+            || sample.x >= (rx + rw) as f64
+            || sample.y >= (ry + rh) as f64
+        {
+            continue;
+        }
+        let (vw, vh) = overlay
+            .view_pixel_size(view_id)
+            .unwrap_or((rw as u32, rh as u32));
+        let lx = (sample.x - rx as f64) / rw as f64 * vw as f64;
+        let ly = (sample.y - ry as f64) / rh as f64 * vh as f64;
+        let event = FlutterPointerEvent {
+            struct_size: std::mem::size_of::<FlutterPointerEvent>(),
+            phase: sample.phase,
+            timestamp: unsafe { (dll.FlutterEngineGetCurrentTime)() } as usize / 1000,
+            x: lx,
+            y: ly,
+            device: view_id as i32 + 1,
+            signal_kind: if sample.scroll_delta_x != 0.0 || sample.scroll_delta_y != 0.0 {
+                FlutterPointerSignalKind_kFlutterPointerSignalKindScroll
+            } else {
+                FlutterPointerSignalKind_kFlutterPointerSignalKindNone
+            },
+            scroll_delta_x: sample.scroll_delta_x,
+            scroll_delta_y: sample.scroll_delta_y,
+            device_kind: FlutterPointerDeviceKind_kFlutterPointerDeviceKindMouse,
+            buttons: sample.buttons,
+            pan_x: 0.0,
+            pan_y: 0.0,
+            scale: 1.0,
+            rotation: 0.0,
+            view_id,
+        };
+        let _ = unsafe { (dll.FlutterEngineSendPointerEvent)(engine, &event as *const _, 1) };
     }
 }

@@ -141,6 +141,7 @@ impl FlutterOverlay {
             damage_rects: Mutex::new(Vec::new()),
             frame_damage_rects: Mutex::new(Vec::new()),
             gl: None,
+            screen_rect: None,
         };
         self.view_registry.insert(view_id, surface);
 
@@ -173,6 +174,9 @@ impl FlutterOverlay {
                 return Err(FlutterEmbedderError::OperationFailed(format!(
                     "FlutterEngineAddView failed to start: {result:?}"
                 )));
+            }
+            unsafe {
+                (self.engine_dll.FlutterEngineSendWindowMetricsEvent)(self.engine.0, &metrics);
             }
             info!("[multiview] added offscreen view {view_id} ({width}x{height})");
             return Ok(view_id);
@@ -261,6 +265,22 @@ impl FlutterOverlay {
 
     pub fn view_texture_srv(&self, view_id: FlutterViewId) -> Option<ID3D11ShaderResourceView> {
         self.view_registry.with_view(view_id, |s| s.srv.clone())
+    }
+
+    pub fn view_screen_rect(&self, view_id: FlutterViewId) -> Option<(f32, f32, f32, f32)> {
+        self.view_registry
+            .with_view(view_id, |s| s.screen_rect)
+            .flatten()
+    }
+
+    pub fn view_pixel_size(&self, view_id: FlutterViewId) -> Option<(u32, u32)> {
+        self.view_registry
+            .with_view(view_id, |s| (s.width, s.height))
+    }
+
+    pub fn set_view_screen_rect(&self, view_id: FlutterViewId, rect: Option<(f32, f32, f32, f32)>) {
+        self.view_registry
+            .with_view(view_id, |s| s.screen_rect = rect);
     }
 
     pub fn secondary_view_ids(&self) -> Vec<FlutterViewId> {

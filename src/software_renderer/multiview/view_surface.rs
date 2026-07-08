@@ -128,6 +128,11 @@ pub struct ViewSurface {
     /// GL/EGL render resources (FBO + color texture + pbuffer). `None` until the
     /// first render-thread setup completes.
     pub gl: Option<ViewGlResources>,
+
+    /// Where this view is drawn on screen (x, y, w, h) in window client pixels,
+    /// set by the host so pointer events can be hit-tested + offset into the
+    /// view's local space. `None` = not positioned (skip input routing).
+    pub screen_rect: Option<(f32, f32, f32, f32)>,
 }
 
 // SAFETY: identical contract to the implicit-view COM fields on FlutterOverlay —

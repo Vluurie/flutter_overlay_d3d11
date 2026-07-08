@@ -132,11 +132,19 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Once;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::time::Instant;
 
 /// Global flag indicating that the overlay system is fully initialized and ready.
 static OVERLAY_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
+/// Backbuffer size as (w << 32 | h), updated at init/resize, readable lock-free.
+static SCREEN_SIZE: AtomicU64 = AtomicU64::new(0);
+/// Last pointer position in screen px as (x_bits << 32 | y_bits) (f32 bit patterns),
+/// updated on every pointer sample, readable lock-free across DLL copies.
+pub static POINTER_POS: AtomicU64 = AtomicU64::new(0);
+/// Last pointer button bitmask (FlutterPointerMouseButtons; bit 0 = primary),
+/// updated on every pointer sample, readable lock-free across DLL copies.
+pub static POINTER_BUTTONS: AtomicI64 = AtomicI64::new(0);
 
 use directx_math::{XMMatrix, XMMatrixIdentity};
 use log::{error, info, warn};
@@ -176,6 +184,12 @@ use crate::software_renderer::overlay::semantics_handler::update_interactive_wid
 #[derive(Clone, Copy)]
 pub struct FlutterOverlayManagerHandle {
     pub manager: &'static Mutex<OverlayManager>,
+    /// Pointer into this module's SCREEN_SIZE so reads work across DLL copies.
+    pub screen: &'static AtomicU64,
+    /// Pointer into this module's POINTER_POS so reads work across DLL copies.
+    pub pointer: &'static AtomicU64,
+    /// Pointer into this module's POINTER_BUTTONS so reads work across DLL copies.
+    pub pointer_buttons: &'static AtomicI64,
 }
 
 /// Gets a thread-safe handle to the global OverlayManager.
@@ -184,6 +198,9 @@ pub struct FlutterOverlayManagerHandle {
 pub fn get_flutter_overlay_manager_handle() -> Option<FlutterOverlayManagerHandle> {
     get_overlay_manager().map(|manager_mutex| FlutterOverlayManagerHandle {
         manager: manager_mutex,
+        screen: &SCREEN_SIZE,
+        pointer: &POINTER_POS,
+        pointer_buttons: &POINTER_BUTTONS,
     })
 }
 
@@ -413,6 +430,19 @@ impl OverlayManager {
         out
     }
 
+    /// Set where an offscreen view is drawn on screen (client px) so pointer
+    /// events can be routed to it. Pass `None` to disable input for the view.
+    pub fn set_offscreen_view_rect(
+        &self,
+        identifier: Option<&str>,
+        view_id: FlutterViewId,
+        rect: Option<(f32, f32, f32, f32)>,
+    ) {
+        if let Ok(overlay) = self.get_instance(identifier) {
+            overlay.set_view_screen_rect(view_id, rect);
+        }
+    }
+
     /// Re-metrics an offscreen view to a new size (invalidates its SRV).
     pub fn resize_offscreen_view(
         &mut self,
@@ -568,6 +598,7 @@ impl OverlayManager {
 
         self.screen_width = width;
         self.screen_height = height;
+        SCREEN_SIZE.store(((width as u64) << 32) | height as u64, Ordering::Release);
         self.swap_chain = Some(swap_chain.clone());
 
         init_logging();
@@ -787,6 +818,7 @@ impl OverlayManager {
     ) {
         self.screen_width = width;
         self.screen_height = height;
+        SCREEN_SIZE.store(((width as u64) << 32) | height as u64, Ordering::Release);
         self.swap_chain = Some(swap_chain.clone());
 
         if self.active_instances.is_empty() {
@@ -1238,6 +1270,18 @@ impl FlutterOverlayManagerHandle {
         identifier: Option<&str>,
     ) -> Vec<(FlutterViewId, ID3D11ShaderResourceView)> {
         self.manager.lock().offscreen_view_srvs(identifier)
+    }
+
+    /// Set an offscreen view's on-screen rect (client px) for pointer routing.
+    pub fn set_offscreen_view_rect(
+        &self,
+        identifier: Option<&str>,
+        view_id: FlutterViewId,
+        rect: Option<(f32, f32, f32, f32)>,
+    ) {
+        self.manager
+            .lock()
+            .set_offscreen_view_rect(identifier, view_id, rect);
     }
 
     /// Re-metrics an offscreen view to a new size.
@@ -2335,6 +2379,33 @@ impl FlutterOverlayManagerHandle {
         } else {
             HashMap::new()
         }
+    }
+
+    /// Backbuffer size, lock-free (mirrored atomically at init/resize).
+    pub fn screen_size(&self) -> Option<(u32, u32)> {
+        let v = self.screen.load(Ordering::Acquire);
+        if v == 0 {
+            None
+        } else {
+            Some(((v >> 32) as u32, v as u32))
+        }
+    }
+
+    /// Last pointer position in screen pixels, or `None` if no sample yet.
+    pub fn pointer_pos(&self) -> Option<(f32, f32)> {
+        let v = self.pointer.load(Ordering::Acquire);
+        if v == 0 {
+            None
+        } else {
+            let x = f32::from_bits((v >> 32) as u32);
+            let y = f32::from_bits(v as u32);
+            Some((x, y))
+        }
+    }
+
+    /// Last pointer button bitmask (bit 0 = primary/left button).
+    pub fn pointer_buttons(&self) -> i64 {
+        self.pointer_buttons.load(Ordering::Acquire)
     }
 
     /// Gets a clone of the shared Direct3D device context used by the manager.
