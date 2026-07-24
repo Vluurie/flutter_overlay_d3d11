@@ -465,10 +465,9 @@ pub struct AngleInteropState {
     /// recreate_resources on the render thread (where it's safe) before proceeding.
     pub pending_resize: Option<(u32, u32)>,
 
-    /// Old pbuffer surface pending deferred destruction. Set by cleanup_surface_resources
-    /// (called from the resize thread) and destroyed in make_current_callback (on the
-    /// render thread where the context is current).
-    pub old_pbuffer_surface: Option<*mut c_void>,
+    /// Old pbuffer surfaces pending deferred destruction, drained on the render thread.
+    /// A queue, not a single slot: back-to-back resizes must not clobber an undestroyed surface.
+    pub old_pbuffer_surfaces: Vec<*mut c_void>,
 }
 
 impl AngleInteropState {
@@ -653,7 +652,7 @@ impl AngleInteropState {
                 resource_thread_id: None,
                 device_lost: false,
                 pending_resize: None,
-                old_pbuffer_surface: None,
+                old_pbuffer_surfaces: Vec::new(),
             }))
         }
     }
@@ -967,7 +966,7 @@ impl AngleInteropState {
     ///
     pub fn cleanup_surface_resources(&mut self) {
         if self.pbuffer_surface != EGL_NO_SURFACE {
-            self.old_pbuffer_surface = Some(self.pbuffer_surface);
+            self.old_pbuffer_surfaces.push(self.pbuffer_surface);
             self.pbuffer_surface = EGL_NO_SURFACE;
         }
     }
@@ -1034,8 +1033,8 @@ impl Drop for AngleInteropState {
                 "[AngleInterop] Dropping AngleInteropState on thread {:?}.",
                 std::thread::current().id()
             );
-            // Destroy any pending old surface
-            if let Some(old_surface) = self.old_pbuffer_surface.take() {
+            // Destroy any pending old surfaces
+            for old_surface in self.old_pbuffer_surfaces.drain(..) {
                 (self.egl_destroy_surface)(self.display, old_surface);
             }
             self.cleanup_surface_resources();
@@ -1158,17 +1157,19 @@ extern "C" fn make_current_callback(user_data: *mut c_void) -> bool {
                 return false;
             }
 
-            // Deferred cleanup: destroy the old surface from the render thread
-            // where it was current. This is safe because eglMakeCurrent below
-            // will detach it before we destroy.
-            if let Some(old_surface) = state.old_pbuffer_surface.take() {
+            // Deferred cleanup: destroy the old surfaces from the render thread
+            // where they were current. This is safe because eglMakeCurrent below
+            // will detach them before we destroy.
+            if !state.old_pbuffer_surfaces.is_empty() {
                 (state.egl_make_current)(
                     state.display,
                     EGL_NO_SURFACE,
                     EGL_NO_SURFACE,
                     EGL_NO_CONTEXT,
                 );
-                (state.egl_destroy_surface)(state.display, old_surface);
+                for old_surface in state.old_pbuffer_surfaces.drain(..) {
+                    (state.egl_destroy_surface)(state.display, old_surface);
+                }
             }
 
             let result: EGLBoolean = (state.egl_make_current)(
