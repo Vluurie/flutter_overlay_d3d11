@@ -1,5 +1,6 @@
 use crate::bindings::embedder::{
-    self, FlutterEngine, FlutterProjectArgs, FlutterRendererConfig, FlutterWindowMetricsEvent,
+    self, FlutterEngine, FlutterLocale, FlutterProjectArgs, FlutterRendererConfig,
+    FlutterWindowMetricsEvent,
 };
 
 use crate::software_renderer::dynamic_flutter_engine_dll_loader::FlutterEngineDll;
@@ -7,13 +8,19 @@ use crate::software_renderer::overlay::overlay_impl::{
     PendingPlatformMessage, SendableFlutterEngine,
 };
 
-use log::error;
-use std::ffi::c_void;
+use log::{error, info};
+use std::ffi::{c_void, CString};
 use std::ptr;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use super::overlay_impl::FlutterOverlay;
+
+// LOCALE_NAME_MAX_LENGTH from winnls.h;
+const LOCALE_NAME_MAX_LENGTH: usize = 85;
+unsafe extern "system" {
+    fn GetUserDefaultLocaleName(lpLocaleName: *mut u16, cchLocaleName: i32) -> i32;
+}
 
 pub(crate) fn run_engine(
     version: usize,
@@ -66,9 +73,8 @@ pub(crate) fn run_engine(
         let run_result = (engine_dll_arc.FlutterEngineRunInitialized)(engine_handle);
 
         if run_result != embedder::FlutterEngineResult_kSuccess {
-            let err_msg = format!(
-                "[Engine] FlutterEngineRunInitialized failed with result: {run_result:?}"
-            );
+            let err_msg =
+                format!("[Engine] FlutterEngineRunInitialized failed with result: {run_result:?}");
             error!("{err_msg}");
 
             (engine_dll_arc.FlutterEngineDeinitialize)(engine_handle);
@@ -106,10 +112,66 @@ pub(crate) fn update_flutter_window_metrics(
     wm.top = y as usize;
     let r = unsafe { (engine_dll.FlutterEngineSendWindowMetricsEvent)(engine, &wm) };
     if r != embedder::FlutterEngineResult_kSuccess {
-        error!(
-            "[Metrics] FlutterEngineSendWindowMetricsEvent failed with result: {r:?}"
-        );
+        error!("[Metrics] FlutterEngineSendWindowMetricsEvent failed with result: {r:?}");
     }
+}
+
+/// Reports the OS user-default locale to the engine via `UpdateLocales`.
+pub(crate) fn send_system_locale_to_engine(engine: FlutterEngine, engine_dll: &FlutterEngineDll) {
+    if engine.is_null() {
+        error!("[Locale] null engine handle.");
+        return;
+    }
+
+    let Some((language, country)) = read_user_default_locale() else {
+        error!("[Locale] could not read the OS default locale.");
+        return;
+    };
+
+    let language_c = match CString::new(language.as_str()) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let country_c = CString::new(country.as_str()).ok();
+
+    let locale = FlutterLocale {
+        struct_size: std::mem::size_of::<FlutterLocale>(),
+        language_code: language_c.as_ptr(),
+        country_code: country_c.as_ref().map_or(ptr::null(), |c| c.as_ptr()),
+        script_code: ptr::null(),
+        variant_code: ptr::null(),
+    };
+
+    let mut locales: [*const FlutterLocale; 1] = [&locale];
+    let r = unsafe {
+        (engine_dll.FlutterEngineUpdateLocales)(engine, locales.as_mut_ptr(), locales.len())
+    };
+
+    if r != embedder::FlutterEngineResult_kSuccess {
+        error!("[Locale] FlutterEngineUpdateLocales failed: {r:?}");
+    } else {
+        info!("[Locale] reported OS locale to engine: {language}-{country}");
+    }
+}
+
+fn read_user_default_locale() -> Option<(String, String)> {
+    let mut buf = [0u16; LOCALE_NAME_MAX_LENGTH];
+    let len = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
+    if len <= 0 {
+        return None;
+    }
+
+    // `len` counts the trailing NUL.
+    let end = (len as usize).saturating_sub(1).min(buf.len());
+    let name = String::from_utf16_lossy(&buf[..end]);
+    if name.is_empty() {
+        return None;
+    }
+
+    let mut parts = name.split('-');
+    let language = parts.next()?.to_ascii_lowercase();
+    let country = parts.next().unwrap_or("").to_ascii_uppercase();
+    Some((language, country))
 }
 
 #[unsafe(no_mangle)]

@@ -14,7 +14,7 @@ use crate::software_renderer::overlay::d3d::{
     create_compositing_texture, create_srv, create_texture,
 };
 use crate::software_renderer::overlay::engine::{
-    on_root_isolate_created, run_engine, update_flutter_window_metrics,
+    on_root_isolate_created, run_engine, send_system_locale_to_engine, update_flutter_window_metrics,
 };
 use crate::software_renderer::overlay::overlay_impl::{
     FLUTTER_LOG_TAG, SendHwnd, SendableFlutterEngine, SendableHandle,
@@ -515,6 +515,8 @@ pub(crate) fn init_overlay(
         };
 
         (engine_dll_arc.FlutterEngineUpdateSemanticsEnabled)(engine_handle, true);
+
+        send_system_locale_to_engine(engine_handle, &engine_dll_arc);
 
         overlay_box.engine = SendableFlutterEngine(engine_handle);
         engine_atomic_ptr_instance.store(engine_handle, Ordering::SeqCst);

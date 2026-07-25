@@ -159,6 +159,14 @@ pub struct FlutterEngineDll {
             object: *const e::FlutterEngineDartObject,
         ) -> e::FlutterEngineResult,
     >,
+    pub FlutterEngineUpdateLocales: Symbol<
+        'static,
+        unsafe extern "C" fn(
+            engine: e::FlutterEngine,
+            locales: *mut *const e::FlutterLocale,
+            locales_count: usize,
+        ) -> e::FlutterEngineResult,
+    >,
 }
 
 static ENGINE_DLL_CACHE: Lazy<Mutex<HashMap<PathBuf, Arc<FlutterEngineDll>>>> =
@@ -265,6 +273,10 @@ impl FlutterEngineDll {
             FlutterEnginePostDartObject: load_symbol!(
                 lib_static,
                 b"FlutterEnginePostDartObject\0"
+            )?,
+            FlutterEngineUpdateLocales: load_symbol!(
+                lib_static,
+                b"FlutterEngineUpdateLocales\0"
             )?,
         })
     }

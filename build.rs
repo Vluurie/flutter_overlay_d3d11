@@ -6,6 +6,8 @@ mod keyboard_map;
 #[cfg(feature = "regenerate-bindings")]
 mod regenerate_assets {
     use super::keyboard_map;
+    use bindgen::Builder;
+    use bindgen::callbacks::CargoCallbacks;
     use keyboard_map::gen_keyboard_map::generate_keyboard_map;
     use std::{env, path::PathBuf};
 
@@ -39,7 +41,7 @@ mod regenerate_assets {
         assert!(header_windows.is_file(), "flutter_windows.h not found");
         assert!(header_embedder.is_file(), "flutter_embedder.h not found");
 
-        let bindings_windows = bindgen::Builder::default()
+        let bindings_windows = Builder::default()
             .header(header_windows.to_str().unwrap())
             .clang_arg(format!("-I{}", include_dir.display()))
             .allowlist_type("FlutterDesktopEngineRef")
@@ -69,10 +71,10 @@ mod regenerate_assets {
             .write_to_file(bindings_out_path.join("flutter_windows_bindings.rs"))
             .expect("Couldn't write flutter_windows bindings");
 
-        let bindings_embedder = bindgen::Builder::default()
+        let bindings_embedder = Builder::default()
             .header(header_embedder.to_str().unwrap())
             .clang_arg(format!("-I{}", include_dir.display()))
-            .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+            .parse_callbacks(Box::new(CargoCallbacks::new()))
             .allowlist_type("FlutterEngine")
             .allowlist_type("FlutterProjectArgs")
             .allowlist_type("FlutterRendererConfig")
@@ -125,6 +127,8 @@ mod regenerate_assets {
             .allowlist_function("FlutterEngineRunInitialized")
             .allowlist_function("FlutterEngineDeinitialize")
             .allowlist_function("FlutterEngineUpdateSemanticsEnabled")
+            .allowlist_function("FlutterEngineUpdateLocales")
+            .allowlist_type("FlutterLocale")
             .allowlist_function("FlutterEngineSendWindowMetricsEvent")
             .allowlist_function("FlutterEngineAddView")
             .allowlist_function("FlutterEngineRemoveView")

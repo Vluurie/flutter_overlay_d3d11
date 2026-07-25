@@ -3123,6 +3123,14 @@ unsafe extern "C" {
     ) -> FlutterEngineResult;
 }
 unsafe extern "C" {
+    #[doc = " @brief      Notify a running engine instance that the locale has been\n             updated. The preferred locale must be the first item in the list\n             of locales supplied. The other entries will be used as a\n             fallback.\n\n @param[in]  engine         A running engine instance.\n @param[in]  locales        The updated locales in the order of preference.\n @param[in]  locales_count  The count of locales supplied.\n\n @return     Whether the locale updates were applied.\n"]
+    pub fn FlutterEngineUpdateLocales(
+        engine: FlutterEngine,
+        locales: *mut *const FlutterLocale,
+        locales_count: usize,
+    ) -> FlutterEngineResult;
+}
+unsafe extern "C" {
     #[doc = " @brief      Posts a Dart object to specified send port. The corresponding\n             receive port for send port can be in any isolate running in the\n             VM. This isolate can also be the root isolate for an\n             unrelated engine. The engine parameter is necessary only to\n             ensure the call is not made when no engine (and hence no VM) is\n             running.\n\n             Unlike the platform messages mechanism, there are no threading\n             restrictions when using this API. Message can be posted on any\n             thread and they will be made available to isolate on which the\n             corresponding send port is listening.\n\n             However, it is the embedders responsibility to ensure that the\n             call is not made during an ongoing call the\n             `FlutterEngineDeinitialize` or `FlutterEngineShutdown` on\n             another thread.\n\n @param[in]  engine     A running engine instance.\n @param[in]  port       The send port to send the object to.\n @param[in]  object     The object to send to the isolate with the\n                        corresponding receive port.\n\n @return     If the message was posted to the send port.\n"]
     pub fn FlutterEnginePostDartObject(
         engine: FlutterEngine,
