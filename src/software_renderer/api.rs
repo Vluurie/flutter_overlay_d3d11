@@ -986,6 +986,18 @@ impl FlutterOverlay {
         self.visible
     }
 
+    /// Monotonic count of frames the renderer has presented. `None` when the
+    /// renderer has no frame counter (software mode).
+    pub fn presented_frame_count(&self) -> Option<u64> {
+        match self.renderer_type {
+            RendererType::OpenGL => Some(
+                self.angle_frame_presented
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ),
+            RendererType::Software => None,
+        }
+    }
+
     /// Returns true once the renderer has produced at least one frame.
     pub fn has_first_frame(&self) -> bool {
         match self.renderer_type {

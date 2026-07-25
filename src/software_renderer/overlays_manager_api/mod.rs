@@ -2191,6 +2191,19 @@ impl FlutterOverlayManagerHandle {
         false
     }
 
+    /// Monotonic count of frames presented by the active overlays. `None` when
+    /// unavailable (no instances, software renderer, or manager busy).
+    pub fn presented_frame_count(&self) -> Option<u64> {
+        if let Some(manager) = self.manager.try_lock() {
+            return manager
+                .active_instances
+                .values()
+                .filter_map(|o| o.presented_frame_count())
+                .max();
+        }
+        None
+    }
+
     /// Sets the visibility of a Flutter overlay. An invisible overlay is not rendered and does not receive input.
     /// # Arguments
     /// * `identifier` - The unique identifier of the overlay. If `None`, targets the single active overlay.
