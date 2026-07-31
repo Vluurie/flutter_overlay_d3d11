@@ -329,6 +329,12 @@ impl FlutterOverlay {
 
                         // No damage → nothing changed, reuse previous texture as-is.
                         if damage.is_empty() {
+                            if let Some(mutex) = &self.game_keyed_mutex {
+                                unsafe {
+                                    let _ = mutex.AcquireSync(1, u32::MAX);
+                                    let _ = mutex.ReleaseSync(0);
+                                }
+                            }
                             self.angle_frame_copied.store(presented, Ordering::Relaxed);
                             return;
                         }
