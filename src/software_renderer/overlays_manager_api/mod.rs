@@ -253,6 +253,9 @@ pub struct OverlayManager {
     pub focused_overlay_id: Option<String>,
     /// Shared Direct3D device context for ticking overlays.
     shared_d3d_context: Option<ID3D11DeviceContext>,
+    /// Device every overlay resource is created on. Set by the host; falls back to
+    /// `swap_chain.GetDevice()`, which a swapchain wrapper can answer with its own device.
+    game_device: Option<ID3D11Device>,
     swap_chain: Option<IDXGISwapChain>,
     /// The width of the screen in pixels.
     screen_width: u32,
@@ -290,6 +293,7 @@ impl OverlayManager {
             overlay_order: Vec::new(),
             focused_overlay_id: None,
             shared_d3d_context: None,
+            game_device: None,
             swap_chain: None,
             screen_width: 0,
             screen_height: 0,
@@ -365,14 +369,13 @@ impl OverlayManager {
         identifier: Option<&str>,
         spec: WindowSpec,
     ) -> Result<SatelliteWindow, FlutterEmbedderError> {
-        // Resolve the game device from the manager's swapchain.
-        let swap_chain = self.swap_chain.as_ref().ok_or_else(|| {
+        let swap_chain = self.swap_chain.clone().ok_or_else(|| {
             FlutterEmbedderError::OperationFailed(
                 "OverlayManager has no swap chain; cannot derive game device".to_string(),
             )
         })?;
-        let game_device: ID3D11Device = unsafe { swap_chain.GetDevice() }.map_err(|e| {
-            FlutterEmbedderError::OperationFailed(format!("swap_chain.GetDevice failed: {e}"))
+        let game_device = self.resolve_device(&swap_chain).ok_or_else(|| {
+            FlutterEmbedderError::OperationFailed("failed to resolve game device".to_string())
         })?;
 
         let overlay = self
@@ -395,13 +398,13 @@ impl OverlayManager {
         height: u32,
         pixel_ratio: f64,
     ) -> Result<FlutterViewId, FlutterEmbedderError> {
-        let swap_chain = self.swap_chain.as_ref().ok_or_else(|| {
+        let swap_chain = self.swap_chain.clone().ok_or_else(|| {
             FlutterEmbedderError::OperationFailed(
                 "OverlayManager has no swap chain; cannot derive game device".to_string(),
             )
         })?;
-        let game_device: ID3D11Device = unsafe { swap_chain.GetDevice() }.map_err(|e| {
-            FlutterEmbedderError::OperationFailed(format!("swap_chain.GetDevice failed: {e}"))
+        let game_device = self.resolve_device(&swap_chain).ok_or_else(|| {
+            FlutterEmbedderError::OperationFailed("failed to resolve game device".to_string())
         })?;
 
         let overlay = self
@@ -505,6 +508,15 @@ impl OverlayManager {
         self.shared_d3d_context.clone()
     }
 
+    /// Device to create overlay resources on: the host-supplied one if set, else the
+    /// swapchain's.
+    fn resolve_device(&self, swap_chain: &IDXGISwapChain) -> Option<ID3D11Device> {
+        if let Some(device) = &self.game_device {
+            return Some(device.clone());
+        }
+        unsafe { swap_chain.GetDevice::<ID3D11Device>() }.ok()
+    }
+
     /// Latches all queued primitives for all overlay instances.
     pub fn latch_all_queued_primitives(&mut self) {
         for overlay in self.active_instances.values_mut() {
@@ -559,17 +571,21 @@ impl OverlayManager {
             return true;
         }
 
-        let device = match unsafe { swap_chain.GetDevice::<ID3D11Device>() } {
-            Ok(d) => d,
-            Err(e) => {
-                error!(
-                    "[OverlayManager:{identifier}] Failed to get D3D11 Device from swap chain: {e:?}"
-                );
+        let device = match self.resolve_device(swap_chain) {
+            Some(d) => d,
+            None => {
+                error!("[OverlayManager:{identifier}] Failed to resolve D3D11 device");
                 return false;
             }
         };
 
-        if self.shared_d3d_context.is_none() {
+        let context_matches_device = self
+            .shared_d3d_context
+            .as_ref()
+            .and_then(|ctx| unsafe { ctx.GetDevice() }.ok())
+            .is_some_and(|ctx_device: ID3D11Device| ctx_device == device);
+
+        if !context_matches_device {
             match unsafe { device.GetImmediateContext() } {
                 Ok(ctx) => {
                     self.shared_d3d_context = Some(ctx);
@@ -1957,6 +1973,12 @@ impl FlutterOverlayManagerHandle {
     /// let manager = get_flutter_overlay_manager_handle().unwrap();
     /// manager.clear_effect(Some("main_menu"));
     /// ```
+    /// Pins the device overlay resources are created on. Call before the first overlay is created.
+    pub fn set_game_device(&self, device: ID3D11Device) {
+        let mut manager = self.manager.lock();
+        manager.game_device = Some(device);
+    }
+
     pub fn set_keep_alive(&self, identifier: Option<&str>, keep_alive: bool) {
         let Some(mut manager) = self.manager.try_lock() else {
             return;

@@ -283,6 +283,7 @@ pub(crate) fn init_overlay(
 
         let mut overlay_box = Box::new(FlutterOverlay {
             name,
+            d3d11_device: device.clone(),
             engine: SendableFlutterEngine(ptr::null_mut()),
             engine_atomic_ptr: engine_atomic_ptr_instance.clone(),
             pixel_buffer: pixel_buffer_for_struct,

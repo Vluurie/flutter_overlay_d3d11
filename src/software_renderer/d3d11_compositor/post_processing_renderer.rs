@@ -7,7 +7,7 @@ use directx_math::{
     XMMatrixTranslation,
 };
 use std::{collections::HashMap, mem};
-use windows::Win32::Foundation::BOOL;
+use windows::core::BOOL;
 use windows::Win32::Graphics::Direct3D::D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
 use windows::Win32::Graphics::Direct3D11::*;
 

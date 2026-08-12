@@ -10,7 +10,9 @@ use std::{
 
 use windows::Win32::{
     Foundation::{HANDLE, HWND},
-    Graphics::Direct3D11::{ID3D11Query, ID3D11ShaderResourceView, ID3D11Texture2D},
+    Graphics::Direct3D11::{
+        ID3D11Device, ID3D11Query, ID3D11ShaderResourceView, ID3D11Texture2D,
+    },
     Graphics::Dxgi::IDXGIKeyedMutex,
 };
 
@@ -175,6 +177,10 @@ pub struct FlutterOverlay {
     /// Can be used to check for operations if the engine !is_null()
     /// **CRITICAL: Must be valid post-`init_overlay` for all operations.**
     pub engine: SendableFlutterEngine,
+
+    /// Device `texture`/`srv` were created on. Reused for every later resource so resizes and
+    /// device recovery cannot land on a different device than creation did.
+    pub(crate) d3d11_device: ID3D11Device,
 
     /// The Direct3D 11 compositor responsible for rendering Flutter content to the texture.
     pub post_processor: PostProcessRenderer,
@@ -360,6 +366,7 @@ impl Clone for FlutterOverlay {
             engine_atomic_ptr: self.engine_atomic_ptr.clone(),
             texture: self.texture.clone(),
             srv: self.srv.clone(),
+            d3d11_device: self.d3d11_device.clone(),
             post_processor: self.post_processor.clone(),
             primitive_renderer: self.primitive_renderer.clone(),
             text_renderer: self.text_renderer.clone(),

@@ -1,8 +1,7 @@
 use directx_math::{XMMatrix, XMMatrixTranspose};
 use std::{collections::HashMap, mem};
-use windows::core::PCSTR;
+use windows::core::{BOOL, PCSTR};
 use windows::Win32::{
-    Foundation::BOOL,
     Graphics::{
         Direct3D::{D3D11_PRIMITIVE_TOPOLOGY_LINELIST, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST},
         Direct3D11::*,

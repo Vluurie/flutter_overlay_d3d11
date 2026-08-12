@@ -15,10 +15,6 @@ use crate::software_renderer::overlay::init::{self as internal_embedder_init};
 
 use crate::software_renderer::overlay::input::{handle_pointer_event, handle_set_cursor};
 use crate::software_renderer::overlay::keyevents::handle_keyboard_event;
-// Re-export so `FlutterOverlay` is reachable as a public type under this module
-// (its inherent `impl` and all public methods live in this file). Without this,
-// the type is only visible through the private `overlay` module and cannot be
-// named or linked from public docs.
 pub use crate::software_renderer::overlay::overlay_impl::FlutterOverlay;
 use crate::software_renderer::overlay::platform_message_callback::send_platform_message;
 use crate::software_renderer::ticker::spawn::start_task_runner;
@@ -155,9 +151,9 @@ impl FlutterOverlay {
         new_y: i32,
         new_width: u32,
         new_height: u32,
-        swap_chain: &IDXGISwapChain,
+        _swap_chain: &IDXGISwapChain,
     ) {
-        self.handle_window_resize_inner(new_x, new_y, new_width, new_height, swap_chain, false);
+        self.handle_window_resize_inner(new_x, new_y, new_width, new_height, false);
     }
 
     pub fn handle_window_resize_force(
@@ -166,9 +162,9 @@ impl FlutterOverlay {
         new_y: i32,
         new_width: u32,
         new_height: u32,
-        swap_chain: &IDXGISwapChain,
+        _swap_chain: &IDXGISwapChain,
     ) {
-        self.handle_window_resize_inner(new_x, new_y, new_width, new_height, swap_chain, true);
+        self.handle_window_resize_inner(new_x, new_y, new_width, new_height, true);
     }
 
     fn handle_window_resize_inner(
@@ -177,7 +173,6 @@ impl FlutterOverlay {
         new_y: i32,
         new_width: u32,
         new_height: u32,
-        swap_chain: &IDXGISwapChain,
         force: bool,
     ) {
         if should_skip_resize(
@@ -193,15 +188,7 @@ impl FlutterOverlay {
         self.x = new_x;
         self.y = new_y;
 
-        let game_device = match unsafe { swap_chain.GetDevice::<ID3D11Device>() } {
-            Ok(d) => d,
-            Err(e) => {
-                error!(
-                    "[handle_window_resize] Failed to get device from swap chain: {e}"
-                );
-                return;
-            }
-        };
+        let game_device = self.d3d11_device.clone();
 
         match self.renderer_type {
             RendererType::Software => {
@@ -251,21 +238,23 @@ impl FlutterOverlay {
 
     /// After a deferred resize, the game-side shared texture needs to be re-opened.
     /// Call this before tick() when the overlay has mutable access.
-    pub fn reopen_shared_texture_if_needed(&mut self, context: &ID3D11DeviceContext) {
+    pub fn reopen_shared_texture_if_needed(&mut self, _context: &ID3D11DeviceContext) {
         if self.angle_shared_texture.is_none()
-            && let Some(handle) = &self.d3d11_shared_handle {
-                unsafe {
-                    let game_device: ID3D11Device = context.GetDevice().unwrap();
-                    let mut opt: Option<ID3D11Texture2D> = None;
-                    if game_device.OpenSharedResource(handle.0, &mut opt).is_ok()
-                        && let Some(tex) = opt {
-                            self.game_keyed_mutex = tex.cast().ok();
-                            self.angle_shared_texture = Some(tex);
-                            // Now safe to drop the old shared texture
-                            self.angle_shared_texture_back = None;
-                        }
+            && let Some(handle) = &self.d3d11_shared_handle
+        {
+            unsafe {
+                let game_device = &self.d3d11_device;
+                let mut opt: Option<ID3D11Texture2D> = None;
+                if game_device.OpenSharedResource(handle.0, &mut opt).is_ok()
+                    && let Some(tex) = opt
+                {
+                    self.game_keyed_mutex = tex.cast().ok();
+                    self.angle_shared_texture = Some(tex);
+                    // Now safe to drop the old shared texture
+                    self.angle_shared_texture_back = None;
                 }
             }
+        }
     }
 
     /// Performs per-frame updates, preparing the GPU texture with the latest Flutter content.
@@ -308,9 +297,10 @@ impl FlutterOverlay {
             }
             RendererType::OpenGL => {
                 if let Some(angle_state) = &self.angle_state
-                    && angle_state.0.is_device_lost() {
-                        return;
-                    }
+                    && angle_state.0.is_device_lost()
+                {
+                    return;
+                }
 
                 if let Some(angle_texture) = &self.angle_shared_texture {
                     let presented = self
@@ -401,7 +391,7 @@ impl FlutterOverlay {
     /// Attempts to recover from a device lost condition by reinitializing ANGLE resources.
     /// This should be called when is_device_lost() returns true and the application
     /// wants to attempt to restore rendering capability.
-    pub fn attempt_device_recovery(&mut self, swap_chain: &IDXGISwapChain) -> bool {
+    pub fn attempt_device_recovery(&mut self, _swap_chain: &IDXGISwapChain) -> bool {
         if let Some(angle_state) = &mut self.angle_state {
             if !angle_state.0.is_device_lost() {
                 return true;
@@ -431,16 +421,7 @@ impl FlutterOverlay {
 
             match angle_state.0.recreate_resources(self.width, self.height) {
                 Ok((new_angle_texture, new_shared_handle)) => {
-                    let game_device = match unsafe { swap_chain.GetDevice::<ID3D11Device>() } {
-                        Ok(d) => d,
-                        Err(e) => {
-                            error!(
-                                "[FlutterOverlay:'{}'] Failed to get device from swap chain during recovery: {}",
-                                self.name, e
-                            );
-                            return false;
-                        }
-                    };
+                    let game_device = self.d3d11_device.clone();
 
                     let angle_texture_on_game_device: ID3D11Texture2D = unsafe {
                         let mut opened_resource_option: Option<ID3D11Texture2D> = None;
@@ -731,10 +712,7 @@ impl FlutterOverlay {
         font_id: &str,
         texture: ID3D11ShaderResourceView,
         sampler: ID3D11SamplerState,
-        glyphs: std::collections::HashMap<
-            char,
-            GlyphInfo,
-        >,
+        glyphs: std::collections::HashMap<char, GlyphInfo>,
         line_height: f32,
         base_font_size: f32,
     ) {
@@ -755,10 +733,7 @@ impl FlutterOverlay {
 
     /// Returns a reference to a registered font atlas, if it exists.
     /// Useful for generating text vertices using the text_presets helpers.
-    pub fn get_font_atlas(
-        &self,
-        font_id: &str,
-    ) -> Option<&FontAtlas> {
+    pub fn get_font_atlas(&self, font_id: &str) -> Option<&FontAtlas> {
         self.text_renderer.get_font_atlas(font_id)
     }
 
