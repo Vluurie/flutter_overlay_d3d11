@@ -9,10 +9,10 @@ use crate::software_renderer::overlay::overlay_impl::{
 };
 
 use log::{error, info};
-use std::ffi::{c_void, CString};
+use std::ffi::{CString, c_void};
 use std::ptr;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use super::overlay_impl::FlutterOverlay;
 

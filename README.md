@@ -29,7 +29,7 @@ Full API reference: `cargo doc --no-deps --open`. The embed API lives on the
 
 - Rust, stable toolchain.
 - Windows 10 SDK (for the `windows` crate).
-- Flutter **3.35.7** desktop. The engine DLLs you ship must match this version.
+- Flutter **3.47.0** desktop. The engine DLLs you ship must match this version.
 
 ---
 
@@ -65,7 +65,7 @@ both `flutter build windows` and `flutter assemble`.)
 - **Release / AOT**: there is **no prebuilt release `flutter_engine.dll`**. You
   must compile it yourself from the Flutter engine repo
   (<https://github.com/flutter/engine>), at the version that matches this crate's
-  bindings (currently **3.35.7**, unless you regenerate the bindings). That AOT
+  bindings (currently **3.47.0**, unless you regenerate the bindings). That AOT
   `flutter_engine.dll` is all you need; the app's AOT code is just `app.so` from
   Step 2 (no `gen_snapshot`, no separate snapshot step).
 
@@ -140,7 +140,7 @@ chain and drives `init_instance` end to end, see the test harness:
 exercises the full setup, resize, and shutdown flow). The test Flutter app it
 builds lives at
 [`flutter_artifacts/test_libs/test_app`](flutter_artifacts/test_libs/test_app);
-its README explains where to drop the engine artifacts (version **3.35.7**),
+its README explains where to drop the engine artifacts (version **3.47.0**),
 which are not committed.
 
 The manager is a global handle you fetch with `get_flutter_overlay_manager_handle()`.

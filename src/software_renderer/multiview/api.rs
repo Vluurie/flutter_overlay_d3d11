@@ -158,6 +158,11 @@ impl FlutterOverlay {
             physical_view_inset_left: 0.0,
             display_id: 0,
             view_id,
+            has_constraints: false,
+            min_width_constraint: 0,
+            min_height_constraint: 0,
+            max_width_constraint: 0,
+            max_height_constraint: 0,
         };
 
         if !blocking {
@@ -335,6 +340,11 @@ impl FlutterOverlay {
             physical_view_inset_left: 0.0,
             display_id: 0,
             view_id,
+            has_constraints: false,
+            min_width_constraint: 0,
+            min_height_constraint: 0,
+            max_width_constraint: 0,
+            max_height_constraint: 0,
         };
         let r = unsafe {
             (self.engine_dll.FlutterEngineSendWindowMetricsEvent)(self.engine.0, &metrics)

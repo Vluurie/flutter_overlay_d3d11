@@ -15,6 +15,7 @@ fn wait_for_presents(
     let start = Instant::now();
     while start.elapsed() < timeout {
         h.tick();
+        h.request_frame();
         let now = window_present_count(window);
         if now.saturating_sub(baseline) >= needed {
             return now;

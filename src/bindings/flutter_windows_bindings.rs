@@ -45,11 +45,21 @@ pub struct FlutterDesktopEngine {
 pub type FlutterDesktopEngineRef = *mut FlutterDesktopEngine;
 pub const FlutterDesktopGpuPreference_NoPreference: FlutterDesktopGpuPreference = 0;
 pub const FlutterDesktopGpuPreference_LowPowerPreference: FlutterDesktopGpuPreference = 1;
+pub const FlutterDesktopGpuPreference_HighPerformancePreference: FlutterDesktopGpuPreference = 2;
 pub type FlutterDesktopGpuPreference = ::std::os::raw::c_int;
 pub const FlutterDesktopUIThreadPolicy_Default: FlutterDesktopUIThreadPolicy = 0;
 pub const FlutterDesktopUIThreadPolicy_RunOnPlatformThread: FlutterDesktopUIThreadPolicy = 1;
 pub const FlutterDesktopUIThreadPolicy_RunOnSeparateThread: FlutterDesktopUIThreadPolicy = 2;
 pub type FlutterDesktopUIThreadPolicy = ::std::os::raw::c_int;
+pub const FlutterDesktopAccessibilityMode_DefaultAccessibilityMode:
+    FlutterDesktopAccessibilityMode = 0;
+pub const FlutterDesktopAccessibilityMode_IAccessibleMode: FlutterDesktopAccessibilityMode = 1;
+pub const FlutterDesktopAccessibilityMode_IAccessibleExMode: FlutterDesktopAccessibilityMode = 2;
+pub type FlutterDesktopAccessibilityMode = ::std::os::raw::c_int;
+pub const FlutterDesktopImpellerSwitch_DefaultImpeller: FlutterDesktopImpellerSwitch = 0;
+pub const FlutterDesktopImpellerSwitch_EnabledImpeller: FlutterDesktopImpellerSwitch = 1;
+pub const FlutterDesktopImpellerSwitch_DisabledImpeller: FlutterDesktopImpellerSwitch = 2;
+pub type FlutterDesktopImpellerSwitch = ::std::os::raw::c_int;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct FlutterDesktopEngineProperties {
@@ -61,11 +71,13 @@ pub struct FlutterDesktopEngineProperties {
     pub dart_entrypoint_argv: *mut *const ::std::os::raw::c_char,
     pub gpu_preference: FlutterDesktopGpuPreference,
     pub ui_thread_policy: FlutterDesktopUIThreadPolicy,
+    pub accessibility_mode: FlutterDesktopAccessibilityMode,
+    pub impeller_switch: FlutterDesktopImpellerSwitch,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
     ["Size of FlutterDesktopEngineProperties"]
-        [::std::mem::size_of::<FlutterDesktopEngineProperties>() - 56usize];
+        [::std::mem::size_of::<FlutterDesktopEngineProperties>() - 64usize];
     ["Alignment of FlutterDesktopEngineProperties"]
         [::std::mem::align_of::<FlutterDesktopEngineProperties>() - 8usize];
     ["Offset of field: FlutterDesktopEngineProperties::assets_path"]
@@ -84,6 +96,10 @@ const _: () = {
         [::std::mem::offset_of!(FlutterDesktopEngineProperties, gpu_preference) - 48usize];
     ["Offset of field: FlutterDesktopEngineProperties::ui_thread_policy"]
         [::std::mem::offset_of!(FlutterDesktopEngineProperties, ui_thread_policy) - 52usize];
+    ["Offset of field: FlutterDesktopEngineProperties::accessibility_mode"]
+        [::std::mem::offset_of!(FlutterDesktopEngineProperties, accessibility_mode) - 56usize];
+    ["Offset of field: FlutterDesktopEngineProperties::impeller_switch"]
+        [::std::mem::offset_of!(FlutterDesktopEngineProperties, impeller_switch) - 60usize];
 };
 unsafe extern "C" {
     pub fn FlutterDesktopViewControllerCreate(

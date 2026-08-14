@@ -68,6 +68,10 @@ pub const FlutterSemanticsAction_kFlutterSemanticsActionFocus: FlutterSemanticsA
 #[doc = " Request that scrolls the current scrollable container to a given scroll\n offset."]
 pub const FlutterSemanticsAction_kFlutterSemanticsActionScrollToOffset: FlutterSemanticsAction =
     8388608;
+#[doc = " A request that the node should be expanded."]
+pub const FlutterSemanticsAction_kFlutterSemanticsActionExpand: FlutterSemanticsAction = 16777216;
+#[doc = " A request that the node should be collapsed."]
+pub const FlutterSemanticsAction_kFlutterSemanticsActionCollapse: FlutterSemanticsAction = 33554432;
 #[doc = " The set of possible actions that can be conveyed to a semantics node.\n\n Must match the `SemanticsAction` enum in semantics.dart."]
 pub type FlutterSemanticsAction = ::std::os::raw::c_int;
 #[doc = " The semantics node has the quality of either being \"checked\" or\n \"unchecked\"."]
@@ -207,6 +211,8 @@ pub struct FlutterSemanticsFlags {
     pub is_slider: bool,
     #[doc = " Whether the semantics node represents a keyboard key."]
     pub is_keyboard_key: bool,
+    #[doc = " Whether to block a11y focus for the semantics node."]
+    pub is_accessibility_focus_blocked: bool,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
@@ -261,6 +267,8 @@ const _: () = {
         [::std::mem::offset_of!(FlutterSemanticsFlags, is_slider) - 50usize];
     ["Offset of field: FlutterSemanticsFlags::is_keyboard_key"]
         [::std::mem::offset_of!(FlutterSemanticsFlags, is_keyboard_key) - 51usize];
+    ["Offset of field: FlutterSemanticsFlags::is_accessibility_focus_blocked"]
+        [::std::mem::offset_of!(FlutterSemanticsFlags, is_accessibility_focus_blocked) - 52usize];
 };
 #[doc = " Text has unknown text direction."]
 pub const FlutterTextDirection_kFlutterTextDirectionUnknown: FlutterTextDirection = 0;
@@ -1091,11 +1099,21 @@ pub struct FlutterWindowMetricsEvent {
     pub display_id: FlutterEngineDisplayId,
     #[doc = " The view that this event is describing."]
     pub view_id: i64,
+    #[doc = " If `true`, the window has size constraints.\n If `false`, the constraint values are ignored."]
+    pub has_constraints: bool,
+    #[doc = " Minimum physical width of the window.\n\n If |has_constraints| is `true`, this must be less than or equal to\n |max_width_constraint| and |width|."]
+    pub min_width_constraint: usize,
+    #[doc = " Minimum physical height of the window.\n\n If |has_constraints| is `true`, this must be less than or equal to\n |max_height_constraint| and |height|."]
+    pub min_height_constraint: usize,
+    #[doc = " Maximum physical width of the window.\n\n If |has_constraints| is `true`, this must be greater than or equal to\n |min_width_constraint| and |width|."]
+    pub max_width_constraint: usize,
+    #[doc = " Maximum physical height of the window.\n\n If |has_constraints| is `true`, this must be greater than or equal to\n |min_height_constraint| and |height|."]
+    pub max_height_constraint: usize,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
     ["Size of FlutterWindowMetricsEvent"]
-        [::std::mem::size_of::<FlutterWindowMetricsEvent>() - 96usize];
+        [::std::mem::size_of::<FlutterWindowMetricsEvent>() - 136usize];
     ["Alignment of FlutterWindowMetricsEvent"]
         [::std::mem::align_of::<FlutterWindowMetricsEvent>() - 8usize];
     ["Offset of field: FlutterWindowMetricsEvent::struct_size"]
@@ -1122,6 +1140,16 @@ const _: () = {
         [::std::mem::offset_of!(FlutterWindowMetricsEvent, display_id) - 80usize];
     ["Offset of field: FlutterWindowMetricsEvent::view_id"]
         [::std::mem::offset_of!(FlutterWindowMetricsEvent, view_id) - 88usize];
+    ["Offset of field: FlutterWindowMetricsEvent::has_constraints"]
+        [::std::mem::offset_of!(FlutterWindowMetricsEvent, has_constraints) - 96usize];
+    ["Offset of field: FlutterWindowMetricsEvent::min_width_constraint"]
+        [::std::mem::offset_of!(FlutterWindowMetricsEvent, min_width_constraint) - 104usize];
+    ["Offset of field: FlutterWindowMetricsEvent::min_height_constraint"]
+        [::std::mem::offset_of!(FlutterWindowMetricsEvent, min_height_constraint) - 112usize];
+    ["Offset of field: FlutterWindowMetricsEvent::max_width_constraint"]
+        [::std::mem::offset_of!(FlutterWindowMetricsEvent, max_width_constraint) - 120usize];
+    ["Offset of field: FlutterWindowMetricsEvent::max_height_constraint"]
+        [::std::mem::offset_of!(FlutterWindowMetricsEvent, max_height_constraint) - 128usize];
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1321,6 +1349,8 @@ pub const FlutterPointerDeviceKind_kFlutterPointerDeviceKindMouse: FlutterPointe
 pub const FlutterPointerDeviceKind_kFlutterPointerDeviceKindTouch: FlutterPointerDeviceKind = 2;
 pub const FlutterPointerDeviceKind_kFlutterPointerDeviceKindStylus: FlutterPointerDeviceKind = 3;
 pub const FlutterPointerDeviceKind_kFlutterPointerDeviceKindTrackpad: FlutterPointerDeviceKind = 4;
+pub const FlutterPointerDeviceKind_kFlutterPointerDeviceKindInvertedStylus:
+    FlutterPointerDeviceKind = 5;
 #[doc = " The device type that created a pointer event."]
 pub type FlutterPointerDeviceKind = ::std::os::raw::c_int;
 pub const FlutterPointerSignalKind_kFlutterPointerSignalKindNone: FlutterPointerSignalKind = 0;
@@ -1351,7 +1381,7 @@ pub struct FlutterPointerEvent {
     pub scroll_delta_y: f64,
     #[doc = " The type of the device generating this event.\n Backwards compatibility note: If this is not set, the device will be\n treated as a mouse, with the primary button set for `kDown` and `kMove`.\n If set explicitly to `kFlutterPointerDeviceKindMouse`, you must set the\n correct buttons."]
     pub device_kind: FlutterPointerDeviceKind,
-    #[doc = " The buttons currently pressed, if any."]
+    #[doc = " The buttons currently pressed, if any.\n See `FlutterPointerMouseButtons` or `FlutterPointerStylusButtons`."]
     pub buttons: i64,
     #[doc = " The x offset of the pan/zoom in physical pixels."]
     pub pan_x: f64,
@@ -1363,10 +1393,16 @@ pub struct FlutterPointerEvent {
     pub rotation: f64,
     #[doc = " The identifier of the view that received the pointer event."]
     pub view_id: FlutterViewId,
+    #[doc = " The pressure of the current pointer, where 0.0 is the default value."]
+    pub pressure: f64,
+    #[doc = " The minimum bound of the pressure of the current pointer, where 0.0 is the\n default minimum bound."]
+    pub pressure_min: f64,
+    #[doc = " The maximum bound of the pressure of the current pointer, where 0.0 is the\n default maximum bound."]
+    pub pressure_max: f64,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of FlutterPointerEvent"][::std::mem::size_of::<FlutterPointerEvent>() - 120usize];
+    ["Size of FlutterPointerEvent"][::std::mem::size_of::<FlutterPointerEvent>() - 144usize];
     ["Alignment of FlutterPointerEvent"][::std::mem::align_of::<FlutterPointerEvent>() - 8usize];
     ["Offset of field: FlutterPointerEvent::struct_size"]
         [::std::mem::offset_of!(FlutterPointerEvent, struct_size) - 0usize];
@@ -1400,6 +1436,12 @@ const _: () = {
         [::std::mem::offset_of!(FlutterPointerEvent, rotation) - 104usize];
     ["Offset of field: FlutterPointerEvent::view_id"]
         [::std::mem::offset_of!(FlutterPointerEvent, view_id) - 112usize];
+    ["Offset of field: FlutterPointerEvent::pressure"]
+        [::std::mem::offset_of!(FlutterPointerEvent, pressure) - 120usize];
+    ["Offset of field: FlutterPointerEvent::pressure_min"]
+        [::std::mem::offset_of!(FlutterPointerEvent, pressure_min) - 128usize];
+    ["Offset of field: FlutterPointerEvent::pressure_max"]
+        [::std::mem::offset_of!(FlutterPointerEvent, pressure_max) - 136usize];
 };
 pub const FlutterKeyEventType_kFlutterKeyEventTypeUp: FlutterKeyEventType = 1;
 pub const FlutterKeyEventType_kFlutterKeyEventTypeDown: FlutterKeyEventType = 2;
@@ -1638,10 +1680,12 @@ pub struct FlutterSemanticsNode {
     pub platform_view_id: FlutterPlatformViewIdentifier,
     #[doc = " A textual tooltip attached to the node."]
     pub tooltip: *const ::std::os::raw::c_char,
+    #[doc = " The heading level for this node. A value of 0 means the node is not a\n heading; higher values (1, 2, …) indicate the heading rank, with lower\n numbers being higher-level headings."]
+    pub heading_level: i32,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of FlutterSemanticsNode"][::std::mem::size_of::<FlutterSemanticsNode>() - 288usize];
+    ["Size of FlutterSemanticsNode"][::std::mem::size_of::<FlutterSemanticsNode>() - 296usize];
     ["Alignment of FlutterSemanticsNode"][::std::mem::align_of::<FlutterSemanticsNode>() - 8usize];
     ["Offset of field: FlutterSemanticsNode::struct_size"]
         [::std::mem::offset_of!(FlutterSemanticsNode, struct_size) - 0usize];
@@ -1701,6 +1745,8 @@ const _: () = {
         [::std::mem::offset_of!(FlutterSemanticsNode, platform_view_id) - 272usize];
     ["Offset of field: FlutterSemanticsNode::tooltip"]
         [::std::mem::offset_of!(FlutterSemanticsNode, tooltip) - 280usize];
+    ["Offset of field: FlutterSemanticsNode::heading_level"]
+        [::std::mem::offset_of!(FlutterSemanticsNode, heading_level) - 288usize];
 };
 #[doc = " A node in the Flutter semantics tree.\n\n The semantics tree is maintained during the semantics phase of the pipeline\n (i.e., during PipelineOwner.flushSemantics), which happens after\n compositing. Updates are then pushed to embedders via the registered\n `FlutterUpdateSemanticsCallback2`.\n\n @see https://api.flutter.dev/flutter/semantics/SemanticsNode-class.html"]
 #[repr(C)]
@@ -1773,10 +1819,14 @@ pub struct FlutterSemanticsNode2 {
     pub decreased_value_attribute_count: usize,
     pub decreased_value_attributes: *mut *const FlutterStringAttribute,
     pub flags2: *mut FlutterSemanticsFlags,
+    #[doc = " The heading level for this node. A value of 0 means the node is not a\n heading; higher values (1, 2, …) indicate the heading rank, with lower\n numbers being higher-level headings."]
+    pub heading_level: i32,
+    #[doc = " An identifier for the semantics node in native accessibility hierarchy.\n This value should not be exposed to the users of the app.\n This is usually used for UI testing with tools that work by querying the\n native accessibility, like UI Automator, XCUITest, or Appium."]
+    pub identifier: *const ::std::os::raw::c_char,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of FlutterSemanticsNode2"][::std::mem::size_of::<FlutterSemanticsNode2>() - 376usize];
+    ["Size of FlutterSemanticsNode2"][::std::mem::size_of::<FlutterSemanticsNode2>() - 392usize];
     ["Alignment of FlutterSemanticsNode2"]
         [::std::mem::align_of::<FlutterSemanticsNode2>() - 8usize];
     ["Offset of field: FlutterSemanticsNode2::struct_size"]
@@ -1859,6 +1909,10 @@ const _: () = {
         [::std::mem::offset_of!(FlutterSemanticsNode2, decreased_value_attributes) - 360usize];
     ["Offset of field: FlutterSemanticsNode2::flags2"]
         [::std::mem::offset_of!(FlutterSemanticsNode2, flags2) - 368usize];
+    ["Offset of field: FlutterSemanticsNode2::heading_level"]
+        [::std::mem::offset_of!(FlutterSemanticsNode2, heading_level) - 376usize];
+    ["Offset of field: FlutterSemanticsNode2::identifier"]
+        [::std::mem::offset_of!(FlutterSemanticsNode2, identifier) - 384usize];
 };
 #[doc = " A custom semantics action, or action override.\n\n Custom actions can be registered by applications in order to provide\n semantic actions other than the standard actions available through the\n `FlutterSemanticsAction` enum.\n\n Action overrides are custom actions that the application developer requests\n to be used in place of the standard actions in the `FlutterSemanticsAction`\n enum.\n\n @deprecated     Use `FlutterSemanticsCustomAction2` instead. In order to\n                 preserve ABI compatility for existing users, no new fields\n                 will be added to this struct. New fields will continue to\n                 be added to `FlutterSemanticsCustomAction2`."]
 #[repr(C)]
@@ -2900,10 +2954,12 @@ pub struct FlutterProjectArgs {
     pub view_focus_change_request_callback: FlutterViewFocusChangeRequestCallback,
     #[doc = " Opaque identifier provided by the engine. Accessible in Dart code through\n `PlatformDispatcher.instance.engineId`. Can be used in native code to\n retrieve the engine instance that is running the Dart code."]
     pub engine_id: i64,
+    #[doc = " If true, the engine will decode images in wide gamut color spaces\n (Display P3) when supported. If false, images are decoded to sRGB."]
+    pub enable_wide_gamut: bool,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of FlutterProjectArgs"][::std::mem::size_of::<FlutterProjectArgs>() - 312usize];
+    ["Size of FlutterProjectArgs"][::std::mem::size_of::<FlutterProjectArgs>() - 320usize];
     ["Alignment of FlutterProjectArgs"][::std::mem::align_of::<FlutterProjectArgs>() - 8usize];
     ["Offset of field: FlutterProjectArgs::struct_size"]
         [::std::mem::offset_of!(FlutterProjectArgs, struct_size) - 0usize];
@@ -2988,6 +3044,8 @@ const _: () = {
         [::std::mem::offset_of!(FlutterProjectArgs, view_focus_change_request_callback) - 296usize];
     ["Offset of field: FlutterProjectArgs::engine_id"]
         [::std::mem::offset_of!(FlutterProjectArgs, engine_id) - 304usize];
+    ["Offset of field: FlutterProjectArgs::enable_wide_gamut"]
+        [::std::mem::offset_of!(FlutterProjectArgs, enable_wide_gamut) - 312usize];
 };
 unsafe extern "C" {
     #[doc = " @brief      Creates the necessary data structures to launch a Flutter Dart\n             application in AOT mode. The data may only be collected after\n             all FlutterEngine instances launched using this data have been\n             terminated.\n\n @param[in]  source    The source of the AOT data.\n @param[out] data_out  The AOT data on success. Unchanged on failure.\n\n @return     Returns if the AOT data could be successfully resolved.\n"]
@@ -3116,7 +3174,7 @@ unsafe extern "C" {
     pub fn FlutterEngineGetCurrentTime() -> u64;
 }
 unsafe extern "C" {
-    #[doc = " @brief      Inform the engine to run the specified task. This task has been\n             given to the engine via the\n             `FlutterTaskRunnerDescription.post_task_callback`. This call\n             must only be made at the target time specified in that callback.\n             Running the task before that time is undefined behavior.\n\n @param[in]  engine     A running engine instance.\n @param[in]  task       the task handle.\n\n @return     The result of the call.\n"]
+    #[doc = " @brief      Inform the engine to run the specified task. This task has been\n             given to the embedder via the\n             `FlutterTaskRunnerDescription.post_task_callback`. This call\n             must only be made at the target time specified in that callback.\n             Running the task before that time is undefined behavior.\n\n @param[in]  engine     A running engine instance.\n @param[in]  task       the task handle.\n\n @return     The result of the call.\n"]
     pub fn FlutterEngineRunTask(
         engine: FlutterEngine,
         task: *const FlutterTask,

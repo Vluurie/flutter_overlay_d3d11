@@ -13,12 +13,12 @@ which does not need it.
 ## Engine artifacts (not in git)
 
 The `engine-tests` need the Flutter engine runtime, which is **not** committed.
-The current version is **3.35.7**. Place the binaries here, matching this exact
+The current version is **3.47.0**. Place the binaries here, matching this exact
 layout (the version folder name must be `flutter_engine_<version>`):
 
 ```
 flutter_artifacts/test_libs/flutter-engine-artifacts/
-└── flutter_engine_3.35.7/
+└── flutter_engine_3.47.0/
     ├── Debug/      (JIT, and the fallback if Release is missing)
     │   ├── flutter_engine.dll
     │   ├── icudtl.dat

@@ -1,6 +1,9 @@
-# Route every `cargo build` through clippy-driver (instead of plain rustc) so that
-# clippy lints — including `absolute_paths = "deny"` from Cargo.toml — are enforced
-# at build time, not only under `cargo clippy`. This makes inline absolute paths a
-# hard build error.
-[build]
-rustc-wrapper = ".cargo/rustc-clippy-wrapper.cmd"
+# A clippy `rustc-wrapper` used to live here: it routed every `cargo build`
+# through clippy-driver so that `absolute_paths = "deny"` (Cargo.toml) was
+# enforced at build time, not only under `cargo clippy`.
+#
+# It was removed because clippy-driver re-expands the full `--check-cfg` list
+# for large crates like `windows-sys`, which blows past the ~32K Windows
+# command-line limit and fails the build with "Die Befehlszeile ist zu lang".
+#
+# The lint itself is unchanged and still enforced by `cargo clippy`.

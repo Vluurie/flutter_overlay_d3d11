@@ -881,6 +881,9 @@ unsafe fn send_window_pointer(
         scale: 1.0,
         rotation: 0.0,
         view_id,
+        pressure: 0.0,
+        pressure_min: 0.0,
+        pressure_max: 0.0,
     };
     if !x.is_finite() || !y.is_finite() || view_id < 0 {
         return;

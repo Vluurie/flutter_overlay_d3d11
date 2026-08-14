@@ -7,7 +7,7 @@ mod keyboard_map;
 mod regenerate_assets {
     use super::keyboard_map;
     use bindgen::Builder;
-    use bindgen::callbacks::CargoCallbacks;
+    use bindgen::CargoCallbacks;
     use keyboard_map::gen_keyboard_map::generate_keyboard_map;
     use std::{env, path::PathBuf};
 
@@ -182,7 +182,7 @@ mod engine_test_assets {
     use std::{env, fs, io, process};
     use zip::ZipArchive;
 
-    const FLUTTER_VERSION: &str = "3.35.7";
+    const FLUTTER_VERSION: &str = "3.47.0";
 
     pub fn run() {
         // Release/AOT when FLUTTER_TEST_RELEASE is set (any non-empty value),
