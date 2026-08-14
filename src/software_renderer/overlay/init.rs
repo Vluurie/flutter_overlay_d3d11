@@ -10,27 +10,28 @@ use windows::core::Interface;
 use crate::software_renderer::gl_renderer::angle_interop::{
     AngleInteropState, SendableAngleState, build_opengl_renderer_config,
 };
+use crate::software_renderer::multiview::ViewRegistry;
+use crate::software_renderer::multiview::compositor::{
+    build_compositor, view_focus_change_request_callback,
+};
 use crate::software_renderer::overlay::d3d::{
     create_compositing_texture, create_srv, create_texture,
 };
 use crate::software_renderer::overlay::engine::{
-    on_root_isolate_created, run_engine, send_system_locale_to_engine, update_flutter_window_metrics,
+    on_root_isolate_created, run_engine, send_system_locale_to_engine,
+    update_flutter_window_metrics,
 };
 use crate::software_renderer::overlay::overlay_impl::{
     FLUTTER_LOG_TAG, SendHwnd, SendableFlutterEngine, SendableHandle,
 };
 use crate::software_renderer::overlay::platform_message_callback::simple_platform_message_callback;
-use crate::software_renderer::overlay::textinput::{
-    ViewKeyboardState, register_view_keyboard_state,
-};
 use crate::software_renderer::overlay::project_args::{
     build_project_args_and_strings, flutter_log_callback, maybe_load_aot_path_to_cstring,
 };
-use crate::software_renderer::multiview::ViewRegistry;
-use crate::software_renderer::multiview::compositor::{
-    build_compositor, view_focus_change_request_callback,
-};
 use crate::software_renderer::overlay::renderer::build_software_renderer_config;
+use crate::software_renderer::overlay::textinput::{
+    ViewKeyboardState, register_view_keyboard_state,
+};
 
 use crate::bindings::embedder::{
     self, FlutterCustomTaskRunners, FlutterEngineAOTDataSource,
@@ -107,17 +108,13 @@ pub(crate) fn init_overlay(
         let engine_dll_arc = match FlutterEngineDll::get_for(engine_dll_load_dir) {
             Ok(dll) => dll,
             Err(e) => {
-                error!(
-                    "Failed to load flutter_engine.dll from `{engine_dll_load_dir:?}`: {e:?}"
-                );
+                error!("Failed to load flutter_engine.dll from `{engine_dll_load_dir:?}`: {e:?}");
                 return None;
             }
         };
 
         if width == 0 || height == 0 {
-            error!(
-                "Width and height must be non-zero, got {width}x{height}"
-            );
+            error!("Width and height must be non-zero, got {width}x{height}");
             return None;
         }
 
@@ -454,6 +451,7 @@ pub(crate) fn init_overlay(
                 None
             },
             engine_id: 0,
+            enable_wide_gamut: false,
         };
 
         if let Some(aot_c_ref) = &overlay_box._aot_c {
@@ -507,9 +505,7 @@ pub(crate) fn init_overlay(
         let engine_handle = match engine_run_result {
             Ok(handle) => handle,
             Err(e) => {
-                error!(
-                    "[InitOverlay] Engine initialization failed during run_engine: {e}"
-                );
+                error!("[InitOverlay] Engine initialization failed during run_engine: {e}");
                 engine_atomic_ptr_instance.store(ptr::null_mut(), Ordering::SeqCst);
                 return None;
             }
@@ -547,7 +543,7 @@ fn build_software_renderer_config_tuple(
         angle_state: None,
         d3d11_shared_handle: None,
         angle_shared_texture: None,
-        angle_query: None, // No GPU sync query needed for software renderer
+        angle_query: None,       // No GPU sync query needed for software renderer
         angle_keyed_mutex: None, // No keyed mutex for software renderer
         game_keyed_mutex: None,
         renderer_type: RendererType::Software,

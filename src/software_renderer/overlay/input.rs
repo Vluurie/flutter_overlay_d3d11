@@ -328,6 +328,9 @@ fn send_pointer_event_to_flutter(
             scale: 1.0,
             rotation: 0.0,
             view_id: 0,
+            pressure: 0.0,
+            pressure_min: 0.0,
+            pressure_max: 0.0,
         };
 
         let _res: FlutterEngineResult =
@@ -381,6 +384,9 @@ fn send_pointer_to_secondary_views(overlay: &FlutterOverlay, sample: &PointerSam
             scale: 1.0,
             rotation: 0.0,
             view_id,
+            pressure: 0.0,
+            pressure_min: 0.0,
+            pressure_max: 0.0,
         };
         let _ = unsafe { (dll.FlutterEngineSendPointerEvent)(engine, &event as *const _, 1) };
     }
