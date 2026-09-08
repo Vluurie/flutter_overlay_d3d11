@@ -299,6 +299,10 @@ impl Text3DRenderer {
         self.submit_groups.remove(font_id);
     }
 
+    pub fn has_renderable_content(&self) -> bool {
+        !self.submit_groups.is_empty() || !self.render_buffers.is_empty()
+    }
+
     pub fn set_text(
         &mut self,
         font_id: &str,

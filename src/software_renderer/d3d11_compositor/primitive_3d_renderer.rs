@@ -410,6 +410,17 @@ impl Primitive3DRenderer {
         }
     }
 
+    pub fn has_renderable_content(&self) -> bool {
+        !self.submit_groups_triangles.is_empty()
+            || !self.submit_groups_lines.is_empty()
+            || !self.render_buffer_triangles.is_empty()
+            || !self.render_buffer_lines.is_empty()
+            || !self.submit_groups_triangles_custom.is_empty()
+            || !self.submit_groups_lines_custom.is_empty()
+            || !self.render_buffer_triangles_custom.is_empty()
+            || !self.render_buffer_lines_custom.is_empty()
+    }
+
     pub fn set_primitives(
         &mut self,
         group_id: &str,

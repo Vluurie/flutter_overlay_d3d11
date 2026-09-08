@@ -1357,6 +1357,17 @@ impl FlutterOverlayManagerHandle {
     ///
     /// // ... now run post-processing on the combined scene ...
     /// ```
+    /// Whether any overlay currently holds 3D primitives or 3D text to draw.
+    pub fn has_renderable_primitives(&self) -> bool {
+        let Some(manager) = self.manager.try_lock() else {
+            return false;
+        };
+        manager.active_instances.values().any(|overlay| {
+            overlay.primitive_renderer.has_renderable_content()
+                || overlay.text_renderer.has_renderable_content()
+        })
+    }
+
     pub fn render_primitives(
         &self,
         view_projection_matrix: &XMMatrix,
