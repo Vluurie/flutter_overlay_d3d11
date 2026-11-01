@@ -62,7 +62,7 @@ The ANGLE DLLs come from a Chrome install or the
 
 ```toml
 [dependencies]
-flutter_rust_windows_embedder = { git = "https://github.com/Vluurie/flutter-rust-windows-embedder.git", branch = "master" }
+flutter_rust_windows_embedder = { git = "https://github.com/Vluurie/flutter_overlay_d3d11.git", branch = "master" }
 ```
 
 Get the manager with `get_flutter_overlay_manager_handle()` and call it from
