@@ -5,6 +5,7 @@ use crate::bindings::embedder::{
     FlutterViewFocusState_kFocused, FlutterViewFocusState_kUnfocused,
 };
 
+use crate::software_renderer::overlay::engine::send_system_locale_to_engine;
 use crate::software_renderer::overlay::overlay_impl::FlutterOverlay;
 use crate::software_renderer::ticker::task_runner_window::{Timer, run_message_loop};
 
@@ -37,6 +38,7 @@ pub fn start_task_runner(overlay: &mut FlutterOverlay) {
     let pending_messages_for_thread = overlay.pending_platform_messages.clone();
     let pending_keys_for_thread = overlay.pending_key_events.clone();
     let pending_view_focus_for_thread = overlay.pending_view_focus.clone();
+    let pending_locale_for_thread = overlay.pending_locale_update.clone();
 
     let waker_for_thread = overlay.task_queue_state.waker.clone();
     let timer = Timer::new();
@@ -75,6 +77,10 @@ pub fn start_task_runner(overlay: &mut FlutterOverlay) {
                     if result != FlutterEngineResult_kSuccess {
                         error!("[TaskRunner] FlutterEngineRunTask failed: {result:?}");
                     }
+                }
+
+                if pending_locale_for_thread.swap(false, Ordering::AcqRel) {
+                    send_system_locale_to_engine(engine, &engine_dll_for_thread);
                 }
 
                 if let Ok(mut pending_focus) = pending_view_focus_for_thread.lock() {

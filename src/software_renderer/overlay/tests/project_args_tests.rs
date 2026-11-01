@@ -1,5 +1,6 @@
+use crate::software_renderer::api::RendererType;
 use crate::software_renderer::overlay::project_args::{
-    build_project_args_and_strings, maybe_load_aot_path_to_cstring,
+    build_project_args_and_strings, engine_args_for_renderer, maybe_load_aot_path_to_cstring,
 };
 use std::ffi::{CString, OsStr};
 
@@ -28,6 +29,57 @@ fn builds_engine_and_dart_args() {
     assert_eq!(engine_argv[1], CString::new("--trace").unwrap());
     assert_eq!(dart_argv.len(), 1);
     assert_eq!(dart_argv[0], CString::new("--observe=123").unwrap());
+}
+
+fn cstrings(args: &[&str]) -> Vec<CString> {
+    args.iter().map(|arg| CString::new(*arg).unwrap()).collect()
+}
+
+#[test]
+fn software_renderer_forces_impeller_off() {
+    for requested in ["--enable-impeller", "--enable-impeller=true"] {
+        let adjusted = engine_args_for_renderer(
+            cstrings(&["app", requested, "--trace"]),
+            &RendererType::Software,
+        );
+        assert_eq!(
+            adjusted,
+            cstrings(&["app", "--trace", "--enable-impeller=false"])
+        );
+    }
+}
+
+#[test]
+fn software_renderer_supplies_a_program_name_when_args_are_empty() {
+    let adjusted = engine_args_for_renderer(Vec::new(), &RendererType::Software);
+    assert_eq!(
+        adjusted,
+        cstrings(&["flutter_embedder", "--enable-impeller=false"])
+    );
+}
+
+#[test]
+fn software_renderer_keeps_argv0_and_unrelated_switches() {
+    let adjusted = engine_args_for_renderer(
+        cstrings(&["--enable-impeller", "--enable-impeller-tracing"]),
+        &RendererType::Software,
+    );
+    assert_eq!(
+        adjusted,
+        cstrings(&[
+            "--enable-impeller",
+            "--enable-impeller-tracing",
+            "--enable-impeller=false"
+        ])
+    );
+}
+
+#[test]
+fn gpu_renderers_keep_the_callers_impeller_choice() {
+    let args = cstrings(&["app", "--enable-impeller=true"]);
+    for renderer in [RendererType::Vulkan, RendererType::OpenGL] {
+        assert_eq!(engine_args_for_renderer(args.clone(), &renderer), args);
+    }
 }
 
 #[test]

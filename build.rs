@@ -160,6 +160,17 @@ mod regenerate_assets {
             .allowlist_type("BoolCallback")
             .allowlist_type("UIntCallback")
             .allowlist_type("ProcResolver")
+            .allowlist_type("FlutterVulkanRendererConfig")
+            .allowlist_type("FlutterVulkanImage")
+            .allowlist_type("FlutterVulkanImageHandle")
+            .allowlist_type("FlutterVulkanInstanceHandle")
+            .allowlist_type("FlutterVulkanPhysicalDeviceHandle")
+            .allowlist_type("FlutterVulkanDeviceHandle")
+            .allowlist_type("FlutterVulkanQueueHandle")
+            .allowlist_type("FlutterVulkanInstanceProcAddressCallback")
+            .allowlist_type("FlutterVulkanImageCallback")
+            .allowlist_type("FlutterVulkanPresentCallback")
+            .allowlist_type("FlutterFrameInfo")
             .generate()
             .expect("Unable to generate flutter_embedder bindings");
 

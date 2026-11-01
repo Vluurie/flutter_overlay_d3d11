@@ -71,7 +71,10 @@ impl FlutterOverlay {
         }
         if self.renderer_type != RendererType::OpenGL || !self.compositor_active {
             return Err(FlutterEmbedderError::OperationFailed(
-                "add_view requires the OpenGL renderer with the compositor active".to_string(),
+                format!(
+                    "add_view requires the OpenGL renderer with the compositor active, but this overlay uses {:?}. Create it with RendererPreference::OpenGL",
+                    self.renderer_type
+                ),
             ));
         }
         if width == 0 || height == 0 {

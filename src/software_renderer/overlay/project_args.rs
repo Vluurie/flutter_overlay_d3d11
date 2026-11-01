@@ -5,7 +5,8 @@ use crate::software_renderer::ticker::task_scheduler::{
     runs_task_on_current_thread_callback,
 };
 
-use log::info;
+use crate::software_renderer::api::RendererType;
+use log::{info, warn};
 use std::ffi::{CStr, CString, OsStr, c_void};
 use std::sync::Arc;
 
@@ -77,6 +78,47 @@ pub(crate) fn build_project_args_and_strings(
 
     (assets_c, icu_c, engine_argv_cs, dart_argv_cs)
 }
+const ENABLE_IMPELLER_SWITCH: &str = "--enable-impeller";
+
+fn is_impeller_switch(arg: &CStr) -> bool {
+    let bytes = arg.to_bytes();
+    let switch = ENABLE_IMPELLER_SWITCH.as_bytes();
+    bytes == switch || (bytes.starts_with(switch) && bytes.get(switch.len()) == Some(&b'='))
+}
+
+/// Forces Impeller off for the software renderer, which is Skia-only.
+pub(crate) fn engine_args_for_renderer(
+    engine_args: Vec<CString>,
+    renderer: &RendererType,
+) -> Vec<CString> {
+    if *renderer != RendererType::Software {
+        return engine_args;
+    }
+
+    let mut args = engine_args.into_iter();
+    let program_name = args
+        .next()
+        .unwrap_or_else(|| CString::from(c"flutter_embedder"));
+
+    let mut impeller_was_requested = false;
+    let mut adjusted = vec![program_name];
+    for arg in args {
+        if is_impeller_switch(&arg) {
+            impeller_was_requested |= arg.to_bytes() != b"--enable-impeller=false";
+        } else {
+            adjusted.push(arg);
+        }
+    }
+    adjusted.push(CString::from(c"--enable-impeller=false"));
+
+    if impeller_was_requested {
+        warn!(
+            "[InitOverlay] Impeller was requested, but the software renderer only supports Skia. Starting the engine with Impeller disabled."
+        );
+    }
+    adjusted
+}
+
 pub(crate) fn maybe_load_aot_path_to_cstring(aot_opt: Option<&OsStr>) -> Option<CString> {
     if let Some(os) = aot_opt {
         let path = os.to_string_lossy();

@@ -35,7 +35,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{Interface, PCWSTR};
 
-use crate::software_renderer::api::{OverlayCreateParams, RendererType};
+use crate::software_renderer::api::{OverlayCreateParams, RendererPreference, RendererType};
+use crate::software_renderer::multiview::tests::crash_report::install as install_crash_report;
 use crate::software_renderer::multiview::window::{SatelliteWindow, WindowSpec, WindowStyle};
 use crate::software_renderer::overlay::overlay_impl::FlutterOverlay;
 
@@ -50,6 +51,7 @@ pub fn step(msg: &str) {
 pub fn init_test_logging() {
     use env_logger::builder as env_logger_builder;
     use log::LevelFilter;
+    install_crash_report();
     let _ = env_logger_builder()
         .is_test(false)
         .filter_level(LevelFilter::Debug)
@@ -246,6 +248,25 @@ impl EngineHarness {
     /// that need custom Dart args must run isolated (their own process / filtered
     /// run), not alongside the shared engine.
     pub fn create_with_dart_args(name: &str, dart_args: Option<Vec<String>>) -> Option<Self> {
+        Self::create_with_renderer(
+            name,
+            dart_args,
+            None,
+            RendererPreference::OpenGL,
+            RendererType::OpenGL,
+        )
+    }
+
+    /// Builds a harness asking for `preference`, or returns `None` (skip) when the
+    /// overlay did not end up on `expected`, i.e. that renderer is unavailable in
+    /// this environment.
+    pub fn create_with_renderer(
+        name: &str,
+        dart_args: Option<Vec<String>>,
+        engine_args: Option<Vec<String>>,
+        preference: RendererPreference,
+        expected: RendererType,
+    ) -> Option<Self> {
         let bundle = test_bundle_root();
         let hwnd = create_hidden_window();
         let (device, swap_chain) = create_device_and_swapchain(hwnd, 256, 256);
@@ -258,18 +279,22 @@ impl EngineHarness {
             height: 256,
             flutter_data_dir: bundle,
             dart_entrypoint_args: dart_args,
-            engine_args: None,
+            engine_args,
+            renderer: preference,
         };
 
         let mut overlay = match FlutterOverlay::create(params, &device, &swap_chain) {
             Ok(o) => o,
             Err(e) => {
-                step(&format!("engine create failed (ANGLE unavailable headless?): {e}"));
+                step(&format!("engine create failed ({expected:?} unavailable headless?): {e}"));
                 return None;
             }
         };
-        if overlay.renderer_type != RendererType::OpenGL {
-            step("OpenGL/ANGLE renderer not active; skipping");
+        if overlay.renderer_type != expected {
+            step(&format!(
+                "{expected:?} renderer not active (got {:?}); skipping",
+                overlay.renderer_type
+            ));
             return None;
         }
         overlay.set_visibility(true);
@@ -286,6 +311,16 @@ impl EngineHarness {
             _hwnd: hwnd,
             _swap_chain: swap_chain,
         })
+    }
+
+    /// The overlay under test.
+    pub fn overlay(&self) -> &FlutterOverlay {
+        &self.overlay
+    }
+
+    /// Mutable access to the overlay under test (resize, visibility, add_view).
+    pub fn overlay_mut(&mut self) -> &mut FlutterOverlay {
+        &mut self.overlay
     }
 
     /// Advances the engine one tick — the game's per-frame `render_ui()` drive.
