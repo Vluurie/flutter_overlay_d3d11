@@ -1,4 +1,5 @@
 /target
+/.claude/
 
 # Engine-tests artifacts. The downloaded engine binaries and all generated
 # build output stay out of git; only the test_app source is tracked so the

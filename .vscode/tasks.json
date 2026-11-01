@@ -48,6 +48,36 @@
       }
     },
     {
+      "label": "INTEGRATION: Vulkan renderer",
+      "type": "shell",
+      "command": "cargo test --features engine-tests --lib vk_renderer -- --nocapture --test-threads=1 2>&1 | Tee-Object -FilePath logs.txt | Write-Host",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
+      }
+    },
+    {
+      "label": "INTEGRATION: Vulkan renderer (RELEASE/AOT Flutter build)",
+      "type": "shell",
+      "command": "$env:FLUTTER_TEST_RELEASE='1'; cargo test --features engine-tests --lib vk_renderer -- --nocapture --test-threads=1 2>&1 | Tee-Object -FilePath logs.txt | Write-Host",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
+      }
+    },
+    {
       "label": "INTEGRATION: resize test only",
       "type": "shell",
       "command": "cargo test --features engine-tests --lib satellite_texture_converges -- --nocapture --test-threads=1 2>&1 | Tee-Object -FilePath logs.txt | Write-Host",

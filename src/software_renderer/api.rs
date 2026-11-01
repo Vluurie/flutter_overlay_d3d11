@@ -51,12 +51,49 @@ pub struct OverlayCreateParams {
     pub dart_entrypoint_args: Option<Vec<String>>,
     /// Optional engine command-line arguments.
     pub engine_args: Option<Vec<String>>,
+    /// Which renderer to try first. See [`RendererPreference`].
+    pub renderer: RendererPreference,
 }
 
+/// The renderer an overlay ended up with.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RendererType {
     Software,
     OpenGL,
+    Vulkan,
+}
+
+/// Which renderer an overlay should be created with. Every choice degrades to
+/// the ones listed after it when it cannot be initialised on this machine, so
+/// creation only fails when even the software renderer fails.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RendererPreference {
+    /// Vulkan → OpenGL → Software.
+    #[default]
+    Auto,
+    /// Vulkan → OpenGL → Software. The stable home for Impeller and the only
+    /// path that needs no ANGLE DLLs, but it renders the implicit view only:
+    /// satellite views are unavailable.
+    Vulkan,
+    /// OpenGL (ANGLE) → Software. Required for satellite views.
+    OpenGL,
+    /// Software only.
+    Software,
+}
+
+impl RendererPreference {
+    /// The renderers to attempt, in order.
+    pub(crate) fn attempt_order(self) -> &'static [RendererType] {
+        match self {
+            RendererPreference::Auto | RendererPreference::Vulkan => &[
+                RendererType::Vulkan,
+                RendererType::OpenGL,
+                RendererType::Software,
+            ],
+            RendererPreference::OpenGL => &[RendererType::OpenGL, RendererType::Software],
+            RendererPreference::Software => &[RendererType::Software],
+        }
+    }
 }
 #[derive(Debug)]
 pub enum FlutterEmbedderError {
@@ -216,6 +253,10 @@ impl FlutterOverlay {
                     );
                 }
             }
+            RendererType::Vulkan => {
+                self.texture = create_compositing_texture(&game_device, self.width, self.height);
+                self.srv = create_srv(&game_device, &self.texture);
+            }
         }
 
         if !self.engine.0.is_null() {
@@ -260,9 +301,10 @@ impl FlutterOverlay {
     /// Performs per-frame updates, preparing the GPU texture with the latest Flutter content.
     /// - For `Software` mode, it uploads pixel data from the CPU.
     /// - For `OpenGL` mode, it waits for ANGLE to finish rendering, then copies from the shared texture.
+    /// - For `Vulkan` mode, it copies the newest presented frame out of the shared texture.
     pub fn tick(&self, context: &ID3D11DeviceContext) {
         if !self.visible || self.width == 0 || self.height == 0 {
-            if !self.secondary_view_ids().is_empty() {
+            if self.renderer_type == RendererType::OpenGL && !self.secondary_view_ids().is_empty() {
                 // View 0 is hidden but satellite views still render. The engine's
                 // raster thread blocks until view 0's keyed mutex is handed back to
                 // key 0 (present_implicit_view releases it to key 1 each frame). If
@@ -294,6 +336,17 @@ impl FlutterOverlay {
         match self.renderer_type {
             RendererType::Software => {
                 tick(self, context);
+            }
+            RendererType::Vulkan => {
+                if let Some(vulkan_state) = &self.vulkan_state
+                    && !vulkan_state.is_device_lost()
+                {
+                    vulkan_state.copy_latest_frame(
+                        context,
+                        &self.texture,
+                        (self.width, self.height),
+                    );
+                }
             }
             RendererType::OpenGL => {
                 if let Some(angle_state) = &self.angle_state
@@ -383,6 +436,8 @@ impl FlutterOverlay {
     pub fn is_device_lost(&self) -> bool {
         if let Some(angle_state) = &self.angle_state {
             angle_state.0.is_device_lost()
+        } else if let Some(vulkan_state) = &self.vulkan_state {
+            vulkan_state.is_device_lost()
         } else {
             false
         }
@@ -391,7 +446,22 @@ impl FlutterOverlay {
     /// Attempts to recover from a device lost condition by reinitializing ANGLE resources.
     /// This should be called when is_device_lost() returns true and the application
     /// wants to attempt to restore rendering capability.
+    ///
+    /// The Vulkan renderer cannot recover in place: the running engine holds the
+    /// lost `VkDevice` for its whole lifetime, so the overlay has to be shut down
+    /// and created again. This returns `false` for it.
     pub fn attempt_device_recovery(&mut self, _swap_chain: &IDXGISwapChain) -> bool {
+        if let Some(vulkan_state) = &self.vulkan_state {
+            if !vulkan_state.is_device_lost() {
+                return true;
+            }
+            error!(
+                "[FlutterOverlay:'{}'] Vulkan device lost. The engine owns the device for its lifetime; recreate the overlay to recover.",
+                self.name
+            );
+            return false;
+        }
+
         if let Some(angle_state) = &mut self.angle_state {
             if !angle_state.0.is_device_lost() {
                 return true;
@@ -975,6 +1045,10 @@ impl FlutterOverlay {
                 self.angle_frame_presented
                     .load(std::sync::atomic::Ordering::Relaxed),
             ),
+            RendererType::Vulkan => self
+                .vulkan_state
+                .as_ref()
+                .map(|vulkan_state| vulkan_state.frames_presented()),
             RendererType::Software => None,
         }
     }
@@ -987,6 +1061,10 @@ impl FlutterOverlay {
                     .load(std::sync::atomic::Ordering::Relaxed)
                     > 0
             }
+            RendererType::Vulkan => self
+                .vulkan_state
+                .as_ref()
+                .is_some_and(|vulkan_state| vulkan_state.frames_presented() > 0),
             RendererType::Software => self
                 .software_first_frame_rendered
                 .load(std::sync::atomic::Ordering::Relaxed),

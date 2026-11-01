@@ -41,6 +41,7 @@ use crate::{
                 TaskQueueState, TaskRunnerContext,
             },
         },
+        vk_renderer::interop::VulkanInteropState,
     },
 };
 
@@ -236,6 +237,12 @@ pub struct FlutterOverlay {
     /// window thread enqueue here and the task runner drains it.
     pub(crate) pending_view_focus: Arc<Mutex<VecDeque<(i64, bool)>>>,
 
+    /// Set when the OS locale still has to be reported to the engine.
+    /// `FlutterEngineUpdateLocales` sends on the `flutter/localization` channel
+    /// and therefore has to run on the platform task-runner thread, which
+    /// clears this flag when it does.
+    pub(crate) pending_locale_update: Arc<AtomicBool>,
+
     /// Instance-specific task queue. Managed by task runner and `post_task_callback`.
     pub(crate) task_queue_state: Arc<TaskQueueState>,
 
@@ -290,6 +297,12 @@ pub struct FlutterOverlay {
     pub(crate) frame_damage_rects: Mutex<Vec<FlutterRect>>,
     /// When true, forces a full repaint on the next frame. Set on resize and device recovery.
     pub(crate) full_repaint_needed: AtomicBool,
+
+    // --- Vulkan specific fields ---
+    /// Vulkan device, render/shared images and frame hand-off state. `Some` only
+    /// for the Vulkan renderer. The engine borrows the device inside, so this
+    /// must outlive the engine; it is dropped with the overlay, after shutdown.
+    pub(crate) vulkan_state: Option<Box<VulkanInteropState>>,
 
     /// Registry of secondary (satellite) views driven by this engine. The
     /// implicit view (`view_id == 0`) is this overlay itself and is NOT stored
@@ -380,6 +393,7 @@ impl Clone for FlutterOverlay {
             pending_platform_messages: self.pending_platform_messages.clone(),
             pending_key_events: self.pending_key_events.clone(),
             pending_view_focus: self.pending_view_focus.clone(),
+            pending_locale_update: self.pending_locale_update.clone(),
             semantics_tree_data: self.semantics_tree_data.clone(),
             message_handlers: self.message_handlers.clone(),
             response_buffer: self.response_buffer.clone(),
@@ -427,6 +441,7 @@ impl Clone for FlutterOverlay {
             damage_rects: Mutex::new(Vec::new()),
             frame_damage_rects: Mutex::new(Vec::new()),
             full_repaint_needed: AtomicBool::new(true),
+            vulkan_state: None,
             angle_shared_texture_back: None,
             angle_keyed_mutex: None,
             game_keyed_mutex: None,

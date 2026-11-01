@@ -163,7 +163,9 @@ use windows::core::Result as WindowsResult;
 
 use crate::bindings::embedder::FlutterViewId;
 use crate::init_logging;
-use crate::software_renderer::api::{FlutterEmbedderError, OverlayCreateParams};
+use crate::software_renderer::api::{
+    FlutterEmbedderError, OverlayCreateParams, RendererPreference,
+};
 use crate::software_renderer::d3d11_compositor::effects::{
     EffectConfig, EffectParams, EffectTarget, HologramParams, PostEffect, WarpFieldParams,
 };
@@ -256,6 +258,8 @@ pub struct OverlayManager {
     /// Device every overlay resource is created on. Set by the host; falls back to
     /// `swap_chain.GetDevice()`, which a swapchain wrapper can answer with its own device.
     game_device: Option<ID3D11Device>,
+    /// Renderer every overlay created from now on tries first.
+    renderer_preference: RendererPreference,
     swap_chain: Option<IDXGISwapChain>,
     /// The width of the screen in pixels.
     screen_width: u32,
@@ -294,6 +298,7 @@ impl OverlayManager {
             focused_overlay_id: None,
             shared_d3d_context: None,
             game_device: None,
+            renderer_preference: RendererPreference::default(),
             swap_chain: None,
             screen_width: 0,
             screen_height: 0,
@@ -629,6 +634,7 @@ impl OverlayManager {
                 flutter_data_dir: flutter_asset_dir.to_path_buf(),
                 dart_entrypoint_args: dart_args_for_this_instance,
                 engine_args: engine_args_opt,
+                renderer: self.renderer_preference,
             },
             &device,
             swap_chain,
@@ -1425,6 +1431,44 @@ impl FlutterOverlayManagerHandle {
     /// // Finally, draw the UI on top of everything.
     /// manager.render_ui();
     /// ```
+    const LIFECYCLE_CHANNEL: &'static str = "flutter/lifecycle";
+    const LIFECYCLE_HIDDEN: &'static [u8] = b"AppLifecycleState.hidden";
+    const LIFECYCLE_RESUMED: &'static [u8] = b"AppLifecycleState.resumed";
+
+    /// While the renderer reports exhausted memory, Dart must not schedule frames: the engine
+    /// would ask for an image the renderer refuses, once per frame. Flutter stops scheduling in
+    /// the `hidden` lifecycle state and starts again on `resumed`, so each transition goes to
+    /// the engine as a lifecycle message through the overlay's platform queue.
+    fn pause_frames_while_memory_exhausted(overlay: &FlutterOverlay) {
+        let Some(paused) = overlay
+            .vulkan_state
+            .as_deref()
+            .and_then(|state| state.update_memory_state())
+        else {
+            return;
+        };
+        let payload = if paused {
+            Self::LIFECYCLE_HIDDEN
+        } else {
+            Self::LIFECYCLE_RESUMED
+        };
+        let message = PendingPlatformMessage {
+            channel: Self::LIFECYCLE_CHANNEL.to_string(),
+            payload_bytes: payload.to_vec(),
+        };
+        match overlay.pending_platform_messages.lock() {
+            Ok(mut queue) => queue.push_back(message),
+            Err(_) => {
+                error!(
+                    "[OverlayManager] lifecycle message for '{}' not queued: lock failed",
+                    overlay.name
+                );
+                return;
+            }
+        }
+        overlay.task_queue_state.waker.wake_up();
+    }
+
     pub fn render_ui(&self) {
         let Some(mut manager) = self.manager.try_lock() else {
             return;
@@ -1450,6 +1494,7 @@ impl FlutterOverlayManagerHandle {
         let mut rendered_any = false;
 
         for (_id, overlay) in manager.active_instances.iter_mut() {
+            Self::pause_frames_while_memory_exhausted(overlay);
             if overlay.is_visible() && overlay.has_first_frame() {
                 overlay.reopen_shared_texture_if_needed(&context);
                 overlay.tick(&context);
@@ -1990,12 +2035,38 @@ impl FlutterOverlayManagerHandle {
         manager.game_device = Some(device);
     }
 
+    /// Chooses the renderer overlays are created with. Applies to overlays
+    /// created after the call. Defaults to [`RendererPreference::Auto`] (Vulkan
+    /// first). Pick [`RendererPreference::OpenGL`] before `init_instance` for an
+    /// overlay that spawns satellite windows or offscreen views: those need the
+    /// compositor, which the engine only supports on the OpenGL path.
+    pub fn set_renderer_preference(&self, preference: RendererPreference) {
+        let mut manager = self.manager.lock();
+        manager.renderer_preference = preference;
+    }
+
+    /// Keeps the overlay running while its UI is hidden. Switching it on takes the UI as hidden
+    /// when the overlay is hidden, as the visibility toggle key left it.
     pub fn set_keep_alive(&self, identifier: Option<&str>, keep_alive: bool) {
         let Some(mut manager) = self.manager.try_lock() else {
             return;
         };
         if let Ok(overlay) = manager.get_instance_mut(identifier) {
+            if keep_alive && !overlay.keep_alive {
+                overlay.ui_hidden = !overlay.is_visible();
+            }
             overlay.keep_alive = keep_alive;
+        }
+    }
+
+    /// Sets whether a kept-alive overlay's UI counts as hidden, the state its visibility toggle
+    /// key flips and reports. It starts as shown, so an overlay whose UI starts hidden sets it.
+    pub fn set_ui_hidden(&self, identifier: Option<&str>, hidden: bool) {
+        let Some(mut manager) = self.manager.try_lock() else {
+            return;
+        };
+        if let Ok(overlay) = manager.get_instance_mut(identifier) {
+            overlay.ui_hidden = hidden;
         }
     }
 

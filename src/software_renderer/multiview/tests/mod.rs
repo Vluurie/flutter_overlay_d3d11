@@ -1,7 +1,9 @@
 mod resize_decision_tests;
 mod view_registry_tests;
 #[cfg(feature = "engine-tests")]
-mod harness;
+mod crash_report;
+#[cfg(feature = "engine-tests")]
+pub(crate) mod harness;
 #[cfg(feature = "engine-tests")]
 mod resize_integration_tests;
 #[cfg(feature = "engine-tests")]

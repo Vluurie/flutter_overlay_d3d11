@@ -34,7 +34,7 @@ pub(crate) mod resize_decision;
 pub mod view_surface;
 pub mod window;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use std::collections::HashMap;
 use std::sync::Mutex;

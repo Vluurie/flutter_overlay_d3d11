@@ -1,5 +1,5 @@
 use crate::path_utils::load_flutter_build_paths;
-use crate::software_renderer::api::{OverlayCreateParams, RendererType};
+use crate::software_renderer::api::{OverlayCreateParams, RendererPreference, RendererType};
 use crate::software_renderer::d3d11_compositor::effects::EffectConfig;
 use crate::software_renderer::d3d11_compositor::post_processing_renderer::PostProcessRenderer;
 use crate::software_renderer::d3d11_compositor::primitive_3d_renderer::Primitive3DRenderer;
@@ -18,15 +18,15 @@ use crate::software_renderer::overlay::d3d::{
     create_compositing_texture, create_srv, create_texture,
 };
 use crate::software_renderer::overlay::engine::{
-    on_root_isolate_created, run_engine, send_system_locale_to_engine,
-    update_flutter_window_metrics,
+    on_root_isolate_created, run_engine, update_flutter_window_metrics,
 };
 use crate::software_renderer::overlay::overlay_impl::{
     FLUTTER_LOG_TAG, SendHwnd, SendableFlutterEngine, SendableHandle,
 };
 use crate::software_renderer::overlay::platform_message_callback::simple_platform_message_callback;
 use crate::software_renderer::overlay::project_args::{
-    build_project_args_and_strings, flutter_log_callback, maybe_load_aot_path_to_cstring,
+    build_project_args_and_strings, engine_args_for_renderer, flutter_log_callback,
+    maybe_load_aot_path_to_cstring,
 };
 use crate::software_renderer::overlay::renderer::build_software_renderer_config;
 use crate::software_renderer::overlay::textinput::{
@@ -46,10 +46,14 @@ use crate::software_renderer::ticker::task_scheduler::{
     TaskRunnerContext, destroy_task_runner_context_callback, post_task_callback,
     runs_task_on_current_thread_callback,
 };
+use crate::software_renderer::vk_renderer::interop::{
+    VulkanInteropState, build_vulkan_renderer_config,
+};
 
-use log::error;
+use log::{error, info, warn};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CString, c_char};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicPtr, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{ffi::c_void, path::PathBuf, ptr};
@@ -62,8 +66,8 @@ use windows::Win32::Graphics::Dxgi::{DXGI_SWAP_CHAIN_DESC, IDXGIKeyedMutex, IDXG
 use super::overlay_impl::FlutterOverlay;
 
 /// GPU + renderer resources produced when selecting/initializing a renderer
-/// (OpenGL/ANGLE or the software fallback) for a new overlay. Replaces a large
-/// anonymous tuple so the type stays readable.
+/// (Vulkan, OpenGL/ANGLE or the software fallback) for a new overlay. Replaces a
+/// large anonymous tuple so the type stays readable.
 struct RendererInitResources {
     rdr_cfg: embedder::FlutterRendererConfig,
     texture: ID3D11Texture2D,
@@ -76,6 +80,7 @@ struct RendererInitResources {
     angle_query: Option<ID3D11Query>,
     angle_keyed_mutex: Option<IDXGIKeyedMutex>,
     game_keyed_mutex: Option<IDXGIKeyedMutex>,
+    vulkan_state: Option<Box<VulkanInteropState>>,
     renderer_type: RendererType,
 }
 
@@ -98,6 +103,7 @@ pub(crate) fn init_overlay(
         flutter_data_dir,
         dart_entrypoint_args,
         engine_args,
+        renderer: renderer_preference,
     } = params;
     let data_dir: Option<PathBuf> = Some(flutter_data_dir);
     let dart_args_opt: Option<&[String]> = dart_entrypoint_args.as_deref();
@@ -153,114 +159,24 @@ pub(crate) fn init_overlay(
             angle_query: angle_query_for_struct,
             angle_keyed_mutex: angle_keyed_mutex_for_struct,
             game_keyed_mutex: game_keyed_mutex_for_struct,
+            vulkan_state: vulkan_state_for_struct,
             renderer_type: final_renderer_type,
-        } = 'opengl_attempt: {
-            if OPENGL_CONTEXT_CREATED
-                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
-            {
-                let opengl_init_result =
-                    AngleInteropState::new(data_dir.as_deref()).and_then(|mut state| {
-                        state
-                            .recreate_resources(width, height)
-                            .map(|(texture, handle)| (state, texture, handle))
-                    });
-
-                match opengl_init_result {
-                    Ok((angle_state, angle_texture_on_angle_device, shared_handle)) => {
-                        let mut opt: Option<ID3D11Texture2D> = None;
-                        let angle_texture_on_game_device: ID3D11Texture2D = match game_device
-                            .OpenSharedResource(shared_handle, &mut opt)
-                            .ok()
-                            .and(opt)
-                        {
-                            Some(tex) => tex,
-                            None => {
-                                error!(
-                                    "[InitOverlay] OpenSharedResource failed for '{name}'. Falling back to software renderer.",
-                                );
-                                drop(angle_state);
-                                OPENGL_CONTEXT_CREATED.store(false, Ordering::SeqCst);
-                                break 'opengl_attempt build_software_renderer_config_tuple(
-                                    game_device,
-                                    width,
-                                    height,
-                                );
-                            }
-                        };
-
-                        let angle_km: Option<IDXGIKeyedMutex> =
-                            angle_texture_on_angle_device.cast().ok();
-                        let game_km: Option<IDXGIKeyedMutex> =
-                            angle_texture_on_game_device.cast().ok();
-
-                        if angle_km.is_none() || game_km.is_none() {
-                            error!(
-                                "[InitOverlay] Failed to get IDXGIKeyedMutex - cross-device sync unavailable!"
-                            );
-                        }
-
-                        let local_texture_on_game_device =
-                            create_compositing_texture(game_device, width, height);
-                        let texture = local_texture_on_game_device;
-                        let srv = create_srv(game_device, &texture);
-
-                        let angle_query: Option<ID3D11Query> = {
-                            let query_desc = D3D11_QUERY_DESC {
-                                Query: D3D11_QUERY_EVENT,
-                                MiscFlags: 0,
-                            };
-                            let mut query_opt: Option<ID3D11Query> = None;
-                            if angle_state
-                                .angle_d3d11_device
-                                .CreateQuery(&query_desc, Some(&mut query_opt))
-                                .is_ok()
-                            {
-                                query_opt
-                            } else {
-                                error!(
-                                    "[InitOverlay] Failed to create D3D11 event query - flickering may occur!"
-                                );
-                                None
-                            }
-                        };
-
-                        let angle_state = Some(SendableAngleState(angle_state));
-                        let rdr_cfg = build_opengl_renderer_config();
-
-                        RendererInitResources {
-                            rdr_cfg,
-                            texture,
-                            srv,
-                            gl_internal_linear_texture: Some(angle_texture_on_angle_device),
-                            pixel_buffer: None,
-                            angle_state,
-                            d3d11_shared_handle: Some(SendableHandle(shared_handle)),
-                            angle_shared_texture: Some(angle_texture_on_game_device),
-                            angle_query,
-                            angle_keyed_mutex: angle_km,
-                            game_keyed_mutex: game_km,
-                            renderer_type: RendererType::OpenGL,
-                        }
-                    }
-                    Err(e) => {
-                        // If even the first attempt fails, reset the flag and fall back.
-                        error!(
-                            "OpenGL initialization failed for overlay: {e}. Falling back to software."
-                        );
-                        OPENGL_CONTEXT_CREATED.store(false, Ordering::SeqCst);
-                        build_software_renderer_config_tuple(game_device, width, height)
-                    }
-                }
-            } else {
-                build_software_renderer_config_tuple(game_device, width, height)
-            }
-        };
+        } = init_renderer(
+            renderer_preference,
+            game_device,
+            data_dir.as_deref(),
+            &name,
+            width,
+            height,
+        );
+        let engine_argv_cs_temp =
+            engine_args_for_renderer(engine_argv_cs_temp, &final_renderer_type);
         let post_processor = PostProcessRenderer::new(device);
         let primitive_renderer = Primitive3DRenderer::new(device);
         let text_renderer = Text3DRenderer::new(device);
 
         let renderer_arg = match final_renderer_type {
+            RendererType::Vulkan => "--renderer=vulkan",
             RendererType::OpenGL => "--renderer=opengl",
             RendererType::Software => "--renderer=software",
         };
@@ -322,6 +238,7 @@ pub(crate) fn init_overlay(
             pending_platform_messages: Arc::new(Mutex::new(VecDeque::new())),
             pending_key_events: Arc::new(Mutex::new(VecDeque::new())),
             pending_view_focus: Arc::new(Mutex::new(VecDeque::new())),
+            pending_locale_update: Arc::new(AtomicBool::new(false)),
             mouse_buttons_state: AtomicI32::new(0),
             is_mouse_added: AtomicBool::new(false),
             semantics_tree_data: Arc::new(Mutex::new(HashMap::new())),
@@ -342,6 +259,7 @@ pub(crate) fn init_overlay(
             damage_rects: std::sync::Mutex::new(Vec::new()),
             frame_damage_rects: std::sync::Mutex::new(Vec::new()),
             full_repaint_needed: std::sync::atomic::AtomicBool::new(true),
+            vulkan_state: vulkan_state_for_struct,
             view_registry: Arc::new(ViewRegistry::new()),
             view0_gl: None,
             compositor_active,
@@ -513,15 +431,157 @@ pub(crate) fn init_overlay(
 
         (engine_dll_arc.FlutterEngineUpdateSemanticsEnabled)(engine_handle, true);
 
-        send_system_locale_to_engine(engine_handle, &engine_dll_arc);
-
         overlay_box.engine = SendableFlutterEngine(engine_handle);
+        overlay_box
+            .pending_locale_update
+            .store(true, Ordering::Release);
         engine_atomic_ptr_instance.store(engine_handle, Ordering::SeqCst);
+        overlay_box.task_queue_state.waker.wake_up();
 
         update_flutter_window_metrics(engine_handle, x, y, width, height, engine_dll_arc.clone());
 
         Some(overlay_box)
     }
+}
+
+/// Brings up the first renderer in `preference`'s attempt order that works on
+/// this machine. Never fails: the software renderer is the floor.
+fn init_renderer(
+    preference: RendererPreference,
+    game_device: &ID3D11Device,
+    data_dir: Option<&Path>,
+    name: &str,
+    width: u32,
+    height: u32,
+) -> RendererInitResources {
+    for renderer in preference.attempt_order() {
+        let attempt = match renderer {
+            RendererType::Vulkan => try_init_vulkan(game_device, width, height),
+            RendererType::OpenGL => try_init_opengl(game_device, data_dir, width, height),
+            RendererType::Software => {
+                return build_software_renderer_config_tuple(game_device, width, height);
+            }
+        };
+        match attempt {
+            Ok(resources) => {
+                info!("[InitOverlay] '{name}' uses the {renderer:?} renderer.");
+                return resources;
+            }
+            Err(e) => {
+                warn!("[InitOverlay] {renderer:?} renderer unavailable for '{name}': {e}");
+            }
+        }
+    }
+    build_software_renderer_config_tuple(game_device, width, height)
+}
+
+/// Vulkan path: an embedder-owned `VkDevice` on the host adapter plus the
+/// host-side compositing texture the frame is copied into each tick.
+fn try_init_vulkan(
+    game_device: &ID3D11Device,
+    width: u32,
+    height: u32,
+) -> Result<RendererInitResources, String> {
+    let vulkan_state = VulkanInteropState::new(game_device, width, height)?;
+    let rdr_cfg = build_vulkan_renderer_config(&vulkan_state);
+    let texture = create_compositing_texture(game_device, width, height);
+    let srv = create_srv(game_device, &texture);
+
+    Ok(RendererInitResources {
+        rdr_cfg,
+        texture,
+        srv,
+        gl_internal_linear_texture: None,
+        pixel_buffer: None,
+        angle_state: None,
+        d3d11_shared_handle: None,
+        angle_shared_texture: None,
+        angle_query: None,
+        angle_keyed_mutex: None,
+        game_keyed_mutex: None,
+        vulkan_state: Some(vulkan_state),
+        renderer_type: RendererType::Vulkan,
+    })
+}
+
+/// OpenGL/ANGLE path. Only one overlay per process may own the ANGLE context;
+/// later overlays get an error here and move on to the next renderer.
+fn try_init_opengl(
+    game_device: &ID3D11Device,
+    data_dir: Option<&Path>,
+    width: u32,
+    height: u32,
+) -> Result<RendererInitResources, String> {
+    if OPENGL_CONTEXT_CREATED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Err("the ANGLE context is already owned by another overlay".to_string());
+    }
+
+    let result = init_opengl_resources(game_device, data_dir, width, height);
+    if result.is_err() {
+        OPENGL_CONTEXT_CREATED.store(false, Ordering::SeqCst);
+    }
+    result
+}
+
+fn init_opengl_resources(
+    game_device: &ID3D11Device,
+    data_dir: Option<&Path>,
+    width: u32,
+    height: u32,
+) -> Result<RendererInitResources, String> {
+    let mut angle_state = AngleInteropState::new(data_dir)?;
+    let (angle_texture_on_angle_device, shared_handle) =
+        angle_state.recreate_resources(width, height)?;
+
+    let mut opened: Option<ID3D11Texture2D> = None;
+    let angle_texture_on_game_device: ID3D11Texture2D =
+        unsafe { game_device.OpenSharedResource(shared_handle, &mut opened) }
+            .ok()
+            .and(opened)
+            .ok_or_else(|| "OpenSharedResource failed on the host device".to_string())?;
+
+    let angle_km: Option<IDXGIKeyedMutex> = angle_texture_on_angle_device.cast().ok();
+    let game_km: Option<IDXGIKeyedMutex> = angle_texture_on_game_device.cast().ok();
+    if angle_km.is_none() || game_km.is_none() {
+        error!("[InitOverlay] Failed to get IDXGIKeyedMutex - cross-device sync unavailable!");
+    }
+
+    let texture = create_compositing_texture(game_device, width, height);
+    let srv = create_srv(game_device, &texture);
+
+    let query_desc = D3D11_QUERY_DESC {
+        Query: D3D11_QUERY_EVENT,
+        MiscFlags: 0,
+    };
+    let mut angle_query: Option<ID3D11Query> = None;
+    let query_created = unsafe {
+        angle_state
+            .angle_d3d11_device
+            .CreateQuery(&query_desc, Some(&mut angle_query))
+    };
+    if query_created.is_err() {
+        error!("[InitOverlay] Failed to create D3D11 event query - flickering may occur!");
+        angle_query = None;
+    }
+
+    Ok(RendererInitResources {
+        rdr_cfg: build_opengl_renderer_config(),
+        texture,
+        srv,
+        gl_internal_linear_texture: Some(angle_texture_on_angle_device),
+        pixel_buffer: None,
+        angle_state: Some(SendableAngleState(angle_state)),
+        d3d11_shared_handle: Some(SendableHandle(shared_handle)),
+        angle_shared_texture: Some(angle_texture_on_game_device),
+        angle_query,
+        angle_keyed_mutex: angle_km,
+        game_keyed_mutex: game_km,
+        vulkan_state: None,
+        renderer_type: RendererType::OpenGL,
+    })
 }
 
 fn build_software_renderer_config_tuple(
@@ -546,6 +606,7 @@ fn build_software_renderer_config_tuple(
         angle_query: None,       // No GPU sync query needed for software renderer
         angle_keyed_mutex: None, // No keyed mutex for software renderer
         game_keyed_mutex: None,
+        vulkan_state: None,
         renderer_type: RendererType::Software,
     }
 }
