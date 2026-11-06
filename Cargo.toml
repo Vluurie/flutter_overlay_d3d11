@@ -1,12 +1,12 @@
 [package]
 name = "flutter_rust_windows_embedder"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2024"
 
 
 [lib]
 name = "flutter_rust_windows_embedder"
-crate-type = ["rlib"] 
+crate-type = ["rlib"]
 
 # [[bin]]
 # name = "flutter_rust_windows_embedder"
@@ -24,8 +24,8 @@ lazy_static = "1.5.0"
 anyhow = "1.0"
 goblin = "0.7"
 libloading = "0.7"
-log         = "0.4"  
-env_logger  = "0.10"
+log = "0.4"
+env_logger = "0.10"
 gag = "1.0.0"
 byteorder = "1.5.0"
 serde_json = "1.0"
@@ -33,7 +33,10 @@ parking_lot = "0.12.4"
 directx_math = "0.2.3"
 serde = { version = "1.0", features = ["derive"] }
 gl = "0.14"
-ash = { version = "0.38", default-features = false, features = ["loaded", "std"] }
+ash = { version = "0.38", default-features = false, features = [
+    "loaded",
+    "std",
+] }
 
 
 winapi = { version = "0.3.9", features = ["minwindef", "dbghelp"] }
@@ -65,7 +68,7 @@ windows = { version = "0.61", features = [
 ] }
 
 [build-dependencies]
-bindgen = { version = "0.71.1", optional = true}
+bindgen = { version = "0.71.1", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"

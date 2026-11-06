@@ -55,6 +55,7 @@ use crate::software_renderer::vk_renderer::queue_guard::{
     get_instance_proc_address_callback, lock_queue,
 };
 use crate::software_renderer::vk_renderer::readback::ReadbackTarget;
+use crate::software_renderer::vk_renderer::shared_check::shared_texture_works;
 use crate::software_renderer::vk_renderer::shared_image::{
     KEY_READER, KEY_WRITER, SharedFrameTarget,
 };
@@ -82,7 +83,7 @@ const RENDER_IMAGE_USAGE: vk::ImageUsageFlags = vk::ImageUsageFlags::from_raw(
         | vk::ImageUsageFlags::SAMPLED.as_raw(),
 );
 
-const COLOR_SUBRESOURCE_RANGE: vk::ImageSubresourceRange = vk::ImageSubresourceRange {
+pub(crate) const COLOR_SUBRESOURCE_RANGE: vk::ImageSubresourceRange = vk::ImageSubresourceRange {
     aspect_mask: vk::ImageAspectFlags::COLOR,
     base_mip_level: 0,
     level_count: 1,
@@ -90,7 +91,7 @@ const COLOR_SUBRESOURCE_RANGE: vk::ImageSubresourceRange = vk::ImageSubresourceR
     layer_count: 1,
 };
 
-const COLOR_SUBRESOURCE_LAYERS: vk::ImageSubresourceLayers = vk::ImageSubresourceLayers {
+pub(crate) const COLOR_SUBRESOURCE_LAYERS: vk::ImageSubresourceLayers = vk::ImageSubresourceLayers {
     aspect_mask: vk::ImageAspectFlags::COLOR,
     mip_level: 0,
     base_array_layer: 0,
@@ -215,7 +216,12 @@ impl VulkanInteropState {
         height: u32,
         force_readback: bool,
     ) -> Result<Box<Self>, String> {
-        let context = VulkanContext::new(game_device, force_readback)?;
+        let mut context = VulkanContext::new(game_device, force_readback)?;
+        if context.handoff() == HandoffMode::SharedTexture
+            && !shared_texture_works(&context, game_device, width, height)
+        {
+            context.use_readback();
+        }
 
         let (command_pool, command_buffer, copy_fence) = create_copy_objects(&context)?;
         let state = Box::new(Self {

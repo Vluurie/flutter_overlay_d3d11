@@ -290,6 +290,13 @@ impl VulkanContext {
         self.handoff
     }
 
+    /// Hands frames over through host memory from now on, after the shared
+    /// texture failed to deliver a frame.
+    pub(crate) fn use_readback(&mut self) {
+        self.handoff = HandoffMode::Readback;
+        self.external_memory = None;
+    }
+
     /// `VK_KHR_external_memory_win32` entry points. `Some` only for
     /// [`HandoffMode::SharedTexture`].
     pub(crate) fn external_memory(&self) -> Option<&external_memory_win32::Device> {

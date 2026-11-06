@@ -45,6 +45,7 @@ pub mod context;
 pub mod interop;
 pub(crate) mod queue_guard;
 pub(crate) mod readback;
+pub(crate) mod shared_check;
 pub(crate) mod shared_image;
 #[cfg(test)]
 mod tests;
