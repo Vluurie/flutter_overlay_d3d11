@@ -239,6 +239,7 @@ pub(crate) fn init_overlay(
             pending_key_events: Arc::new(Mutex::new(VecDeque::new())),
             pending_view_focus: Arc::new(Mutex::new(VecDeque::new())),
             pending_locale_update: Arc::new(AtomicBool::new(false)),
+            pending_low_memory_warning: Arc::new(AtomicBool::new(false)),
             mouse_buttons_state: AtomicI32::new(0),
             is_mouse_added: AtomicBool::new(false),
             semantics_tree_data: Arc::new(Mutex::new(HashMap::new())),

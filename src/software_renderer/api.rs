@@ -921,6 +921,31 @@ impl FlutterOverlay {
         }
     }
 
+    /// Asks the engine to release every resource it can live without.
+    ///
+    /// The Dart VM collects garbage, the framework is told through
+    /// `WidgetsBindingObserver.didHaveMemoryPressure` (which empties its image
+    /// cache), and the rasterizer drops its GPU caches. From Flutter 3.50 on that
+    /// includes Impeller's render-target and texture caches, so on the Vulkan
+    /// renderer this gives video memory back; older engines only trim Skia.
+    ///
+    /// The Vulkan renderer sends this by itself when video memory or the system
+    /// commit runs out. Call it when the host knows about memory pressure the
+    /// overlay cannot see, e.g. before the host makes a large allocation.
+    ///
+    /// Safe to call from any thread: the warning is handed to the platform
+    /// task-runner thread, which delivers it. The caches refill on the following
+    /// frames, so expect those to be slower.
+    pub fn notify_low_memory(&self) -> Result<(), FlutterEmbedderError> {
+        if self.engine.0.is_null() {
+            return Err(FlutterEmbedderError::EngineNotRunning);
+        }
+        self.pending_low_memory_warning
+            .store(true, Ordering::Release);
+        self.task_queue_state.waker.wake_up();
+        Ok(())
+    }
+
     /// Retrieves the D3D11 Shader Resource View (SRV) for this overlay's texture.
     /// Used by the host application to render the Flutter UI.
     /// This clones the SRV (calls AddRef). The caller must Release it.

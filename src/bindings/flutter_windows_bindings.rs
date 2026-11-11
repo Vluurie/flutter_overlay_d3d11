@@ -73,11 +73,12 @@ pub struct FlutterDesktopEngineProperties {
     pub ui_thread_policy: FlutterDesktopUIThreadPolicy,
     pub accessibility_mode: FlutterDesktopAccessibilityMode,
     pub impeller_switch: FlutterDesktopImpellerSwitch,
+    pub enable_flutter_gpu: bool,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
     ["Size of FlutterDesktopEngineProperties"]
-        [::std::mem::size_of::<FlutterDesktopEngineProperties>() - 64usize];
+        [::std::mem::size_of::<FlutterDesktopEngineProperties>() - 72usize];
     ["Alignment of FlutterDesktopEngineProperties"]
         [::std::mem::align_of::<FlutterDesktopEngineProperties>() - 8usize];
     ["Offset of field: FlutterDesktopEngineProperties::assets_path"]
@@ -100,6 +101,8 @@ const _: () = {
         [::std::mem::offset_of!(FlutterDesktopEngineProperties, accessibility_mode) - 56usize];
     ["Offset of field: FlutterDesktopEngineProperties::impeller_switch"]
         [::std::mem::offset_of!(FlutterDesktopEngineProperties, impeller_switch) - 60usize];
+    ["Offset of field: FlutterDesktopEngineProperties::enable_flutter_gpu"]
+        [::std::mem::offset_of!(FlutterDesktopEngineProperties, enable_flutter_gpu) - 64usize];
 };
 unsafe extern "C" {
     pub fn FlutterDesktopViewControllerCreate(

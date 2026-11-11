@@ -154,6 +154,27 @@ pub(crate) fn send_system_locale_to_engine(engine: FlutterEngine, engine_dll: &F
     }
 }
 
+/// Delivers a low memory warning to the engine via `NotifyLowMemoryWarning`.
+///
+/// The Dart VM collects garbage, the framework gets `memoryPressure` on
+/// `flutter/system`, and the rasterizer drops its GPU caches. From Flutter 3.50
+/// on that includes Impeller's render-target and texture caches; older engines
+/// only trim Skia. Runs on the platform task-runner thread.
+pub(crate) fn notify_low_memory_warning(engine: FlutterEngine, engine_dll: &FlutterEngineDll) {
+    if engine.is_null() {
+        error!("[Memory] null engine handle.");
+        return;
+    }
+
+    let r = unsafe { (engine_dll.FlutterEngineNotifyLowMemoryWarning)(engine) };
+
+    if r != embedder::FlutterEngineResult_kSuccess {
+        error!("[Memory] FlutterEngineNotifyLowMemoryWarning failed: {r:?}");
+    } else {
+        info!("[Memory] low memory warning delivered to the engine.");
+    }
+}
+
 fn read_user_default_locale() -> Option<(String, String)> {
     let mut buf = [0u16; LOCALE_NAME_MAX_LENGTH];
     let len = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };

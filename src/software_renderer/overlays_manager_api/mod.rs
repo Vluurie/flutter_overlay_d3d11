@@ -1439,6 +1439,10 @@ impl FlutterOverlayManagerHandle {
     /// would ask for an image the renderer refuses, once per frame. Flutter stops scheduling in
     /// the `hidden` lifecycle state and starts again on `resumed`, so each transition goes to
     /// the engine as a lifecycle message through the overlay's platform queue.
+    ///
+    /// Pausing only stops new allocations. On the way into exhaustion the engine also gets a
+    /// low memory warning, which makes it give back what it already holds (from Flutter 3.50
+    /// on that includes Impeller's render-target and texture caches) so memory can recover.
     fn pause_frames_while_memory_exhausted(overlay: &FlutterOverlay) {
         let Some(paused) = overlay
             .vulkan_state
@@ -1447,6 +1451,12 @@ impl FlutterOverlayManagerHandle {
         else {
             return;
         };
+        if paused && let Err(e) = overlay.notify_low_memory() {
+            error!(
+                "[OverlayManager] low memory warning for '{}' not sent: {e}",
+                overlay.name
+            );
+        }
         let payload = if paused {
             Self::LIFECYCLE_HIDDEN
         } else {
@@ -2936,6 +2946,38 @@ impl FlutterOverlayManagerHandle {
         } else {
             Vec::new()
         }
+    }
+
+    /// Asks every overlay's engine to release the memory it can live without.
+    ///
+    /// Each engine collects Dart garbage, tells the framework through
+    /// `WidgetsBindingObserver.didHaveMemoryPressure` and drops its GPU caches. From
+    /// Flutter 3.50 on that includes Impeller's render-target and texture caches, so
+    /// on the Vulkan renderer this gives video memory back.
+    ///
+    /// The Vulkan renderer already does this by itself when video memory or the
+    /// system commit runs out. Call it when the host knows about memory pressure the
+    /// overlays cannot see, e.g. before loading a level.
+    ///
+    /// # Returns
+    /// `false` if the manager was busy and nothing was sent; call it again next frame.
+    ///
+    /// # Example
+    /// ```rust, no_run
+    /// let manager = get_flutter_overlay_manager_handle().unwrap();
+    /// // Before the game streams in a large level:
+    /// manager.notify_low_memory();
+    /// ```
+    pub fn notify_low_memory(&self) -> bool {
+        let Some(manager) = self.manager.try_lock() else {
+            return false;
+        };
+        for (id, overlay) in manager.active_instances.iter() {
+            if let Err(e) = overlay.notify_low_memory() {
+                error!("[OverlayManager] low memory warning for overlay '{id}' not sent: {e}");
+            }
+        }
+        true
     }
 
     /// Checks if any overlay has experienced a device lost condition.

@@ -24,7 +24,7 @@ a renderer, call `set_renderer_preference` before `init_instance`.
 ## Requirements
 
 - Windows, Rust (stable).
-- Flutter **3.47.0**. `flutter_engine.dll` must match this version.
+- Flutter **3.50.0**. `flutter_engine.dll` must match this version.
 
 ## Runtime files
 

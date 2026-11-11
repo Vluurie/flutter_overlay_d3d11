@@ -243,6 +243,12 @@ pub struct FlutterOverlay {
     /// clears this flag when it does.
     pub(crate) pending_locale_update: Arc<AtomicBool>,
 
+    /// Set when a low memory warning still has to be delivered to the engine.
+    /// `FlutterEngineNotifyLowMemoryWarning` sends on the `flutter/system`
+    /// channel and therefore has to run on the platform task-runner thread,
+    /// which clears this flag when it does.
+    pub(crate) pending_low_memory_warning: Arc<AtomicBool>,
+
     /// Instance-specific task queue. Managed by task runner and `post_task_callback`.
     pub(crate) task_queue_state: Arc<TaskQueueState>,
 
@@ -394,6 +400,7 @@ impl Clone for FlutterOverlay {
             pending_key_events: self.pending_key_events.clone(),
             pending_view_focus: self.pending_view_focus.clone(),
             pending_locale_update: self.pending_locale_update.clone(),
+            pending_low_memory_warning: self.pending_low_memory_warning.clone(),
             semantics_tree_data: self.semantics_tree_data.clone(),
             message_handlers: self.message_handlers.clone(),
             response_buffer: self.response_buffer.clone(),

@@ -147,6 +147,7 @@ mod regenerate_assets {
             .allowlist_function("FlutterEngineScheduleFrame")
             .allowlist_function("FlutterEngineOnVsync")
             .allowlist_function("FlutterEngineScheduleFrame")
+            .allowlist_function("FlutterEngineNotifyLowMemoryWarning")
             .allowlist_type("FlutterEngineDartObject")
             .allowlist_function("FlutterEnginePostDartObject")
             .allowlist_type("FlutterEngineDartPort")
@@ -170,6 +171,8 @@ mod regenerate_assets {
             .allowlist_type("FlutterVulkanInstanceProcAddressCallback")
             .allowlist_type("FlutterVulkanImageCallback")
             .allowlist_type("FlutterVulkanPresentCallback")
+            .allowlist_type("FlutterVulkanExternalTexture")
+            .allowlist_type("FlutterVulkanTextureFrameCallback")
             .allowlist_type("FlutterFrameInfo")
             .generate()
             .expect("Unable to generate flutter_embedder bindings");
@@ -193,7 +196,7 @@ mod engine_test_assets {
     use std::{env, fs, io, process};
     use zip::ZipArchive;
 
-    const FLUTTER_VERSION: &str = "3.47.0";
+    const FLUTTER_VERSION: &str = "3.50.0";
 
     pub fn run() {
         // Release/AOT when FLUTTER_TEST_RELEASE is set (any non-empty value),

@@ -10,6 +10,7 @@
 //! all; once Vulkan is known to work, a failure to start the engine on it fails
 //! the test instead of skipping it.
 
+use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -215,6 +216,56 @@ fn hidden_overlay_never_stalls_the_engine(backend: Backend) {
     });
 }
 
+/// A low memory warning makes the engine drop its GPU caches. It has to reach
+/// the engine through the task runner, and the overlay has to keep delivering
+/// frames from the emptied caches.
+fn low_memory_warning_keeps_delivering(backend: Backend) {
+    with_vulkan_engine(backend, |harness| {
+        assert_bgra(
+            wait_for_app_pixel(harness, 1, 1),
+            APP_BACKGROUND_BGRA,
+            "before the warning",
+        );
+
+        harness
+            .overlay()
+            .notify_low_memory()
+            .expect("the engine is running");
+        let pending = || {
+            harness
+                .overlay()
+                .pending_low_memory_warning
+                .load(Ordering::Acquire)
+        };
+        let start = Instant::now();
+        while start.elapsed() < FRAME_TIMEOUT && pending() {
+            std::thread::sleep(Duration::from_millis(16));
+        }
+        assert!(
+            !pending(),
+            "the task runner never delivered the low memory warning"
+        );
+
+        let before = frame_count(harness);
+        let start = Instant::now();
+        while start.elapsed() < FRAME_TIMEOUT && frame_count(harness) < before + 5 {
+            harness.request_frame();
+            harness.tick();
+            std::thread::sleep(Duration::from_millis(16));
+        }
+        assert!(
+            frame_count(harness) >= before + 5,
+            "engine stopped presenting after the low memory warning"
+        );
+        assert_bgra(
+            wait_for_app_pixel(harness, 1, 1),
+            APP_BACKGROUND_BGRA,
+            "after the warning",
+        );
+        assert!(!harness.overlay().is_device_lost());
+    });
+}
+
 /// `FLUTTER_TEST_RELEASE=1` must really run the AOT snapshot on the release
 /// engine, and its absence must really run JIT: a silent fallback would make the
 /// AOT run of this suite meaningless.
@@ -308,6 +359,21 @@ fn skia_hidden_overlay_never_stalls_the_engine() {
 #[test]
 fn impeller_hidden_overlay_never_stalls_the_engine() {
     hidden_overlay_never_stalls_the_engine(Backend::Impeller);
+}
+
+#[test]
+fn skia_low_memory_warning_keeps_delivering() {
+    low_memory_warning_keeps_delivering(Backend::Skia);
+}
+
+#[test]
+fn impeller_low_memory_warning_keeps_delivering() {
+    low_memory_warning_keeps_delivering(Backend::Impeller);
+}
+
+#[test]
+fn impeller_readback_low_memory_warning_keeps_delivering() {
+    low_memory_warning_keeps_delivering(Backend::ImpellerReadback);
 }
 
 #[test]

@@ -998,6 +998,7 @@ pub fn build_vulkan_renderer_config(state: &VulkanInteropState) -> FlutterRender
                 get_instance_proc_address_callback: Some(get_instance_proc_address_callback),
                 get_next_image_callback: Some(get_next_image_callback),
                 present_image_callback: Some(present_image_callback),
+                external_texture_frame_callback: None,
             },
         },
     }

@@ -167,6 +167,8 @@ pub struct FlutterEngineDll {
             locales_count: usize,
         ) -> e::FlutterEngineResult,
     >,
+    pub FlutterEngineNotifyLowMemoryWarning:
+        Symbol<'static, unsafe extern "C" fn(engine: e::FlutterEngine) -> e::FlutterEngineResult>,
 }
 
 static ENGINE_DLL_CACHE: Lazy<Mutex<HashMap<PathBuf, Arc<FlutterEngineDll>>>> =
@@ -277,6 +279,10 @@ impl FlutterEngineDll {
             FlutterEngineUpdateLocales: load_symbol!(
                 lib_static,
                 b"FlutterEngineUpdateLocales\0"
+            )?,
+            FlutterEngineNotifyLowMemoryWarning: load_symbol!(
+                lib_static,
+                b"FlutterEngineNotifyLowMemoryWarning\0"
             )?,
         })
     }

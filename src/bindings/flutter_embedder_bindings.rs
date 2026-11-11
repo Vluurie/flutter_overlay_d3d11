@@ -537,7 +537,7 @@ const _: () = {
     ["Offset of field: FlutterUIntSize::height"]
         [::std::mem::offset_of!(FlutterUIntSize, height) - 4usize];
 };
-#[doc = " A structure to represent a rectangle."]
+#[doc = " A structure to represent a rectangle.\n"]
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct FlutterRect {
@@ -555,7 +555,7 @@ const _: () = {
     ["Offset of field: FlutterRect::right"][::std::mem::offset_of!(FlutterRect, right) - 16usize];
     ["Offset of field: FlutterRect::bottom"][::std::mem::offset_of!(FlutterRect, bottom) - 24usize];
 };
-#[doc = " A structure to represent a 2D point."]
+#[doc = " A structure to represent a 2D point.\n"]
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct FlutterPoint {
@@ -594,7 +594,7 @@ const _: () = {
     ["Offset of field: FlutterRoundedRect::lower_left_corner_radius"]
         [::std::mem::offset_of!(FlutterRoundedRect, lower_left_corner_radius) - 80usize];
 };
-#[doc = " A structure to represent a damage region."]
+#[doc = " A structure to represent a damage region.\n"]
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct FlutterDamage {
@@ -940,6 +940,55 @@ pub type FlutterVulkanPresentCallback = ::std::option::Option<
 >;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
+pub struct FlutterVulkanExternalTexture {
+    #[doc = " The size of this struct. Must be sizeof(FlutterVulkanExternalTexture)."]
+    pub struct_size: usize,
+    #[doc = " Handle to the VkImage that is owned by the embedder. The engine will\n sample from this image during composition. The VkImage must be in the\n VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL layout when provided to the\n engine."]
+    pub image: FlutterVulkanImageHandle,
+    #[doc = " The VkFormat of the image (for example: VK_FORMAT_R8G8B8A8_UNORM)."]
+    pub format: u32,
+    #[doc = " User data to be returned on the invocation of the destruction callback."]
+    pub user_data: *mut ::std::os::raw::c_void,
+    #[doc = " Callback invoked (on an engine managed thread) that asks the embedder to\n collect the texture. This is optional and can be null."]
+    pub destruction_callback: VoidCallback,
+    #[doc = " Optional parameters for texture height/width, default is 0, non-zero means\n the texture has the specified width/height.\n Physical width of the texture."]
+    pub width: usize,
+    #[doc = " Physical height of the texture."]
+    pub height: usize,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of FlutterVulkanExternalTexture"]
+        [::std::mem::size_of::<FlutterVulkanExternalTexture>() - 56usize];
+    ["Alignment of FlutterVulkanExternalTexture"]
+        [::std::mem::align_of::<FlutterVulkanExternalTexture>() - 8usize];
+    ["Offset of field: FlutterVulkanExternalTexture::struct_size"]
+        [::std::mem::offset_of!(FlutterVulkanExternalTexture, struct_size) - 0usize];
+    ["Offset of field: FlutterVulkanExternalTexture::image"]
+        [::std::mem::offset_of!(FlutterVulkanExternalTexture, image) - 8usize];
+    ["Offset of field: FlutterVulkanExternalTexture::format"]
+        [::std::mem::offset_of!(FlutterVulkanExternalTexture, format) - 16usize];
+    ["Offset of field: FlutterVulkanExternalTexture::user_data"]
+        [::std::mem::offset_of!(FlutterVulkanExternalTexture, user_data) - 24usize];
+    ["Offset of field: FlutterVulkanExternalTexture::destruction_callback"]
+        [::std::mem::offset_of!(FlutterVulkanExternalTexture, destruction_callback) - 32usize];
+    ["Offset of field: FlutterVulkanExternalTexture::width"]
+        [::std::mem::offset_of!(FlutterVulkanExternalTexture, width) - 40usize];
+    ["Offset of field: FlutterVulkanExternalTexture::height"]
+        [::std::mem::offset_of!(FlutterVulkanExternalTexture, height) - 48usize];
+};
+#[doc = " Callback to provide an external texture for a given texture_id.\n See: external_texture_frame_callback."]
+pub type FlutterVulkanTextureFrameCallback = ::std::option::Option<
+    unsafe extern "C" fn(
+        arg1: *mut ::std::os::raw::c_void,
+        arg2: i64,
+        arg3: usize,
+        arg4: usize,
+        arg5: *mut FlutterVulkanExternalTexture,
+    ) -> bool,
+>;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct FlutterVulkanRendererConfig {
     #[doc = " The size of this struct. Must be sizeof(FlutterVulkanRendererConfig)."]
     pub struct_size: usize,
@@ -969,11 +1018,13 @@ pub struct FlutterVulkanRendererConfig {
     pub get_next_image_callback: FlutterVulkanImageCallback,
     #[doc = " The callback invoked when a VkImage has been written to and is ready for\n use by the embedder. Prior to calling this callback, the engine performs\n a host sync, and so the VkImage can be used in a pipeline by the embedder\n without any additional synchronization.\n Not used if a FlutterCompositor is supplied in FlutterProjectArgs."]
     pub present_image_callback: FlutterVulkanPresentCallback,
+    #[doc = " When the embedder specifies that a texture has a frame available, the\n engine will call this method (on an internal engine managed thread) so\n that external texture details can be supplied to the engine for subsequent\n composition. Prior to returning from this callback, the embedder must\n perform a host sync, and so the engine can sample the VkImage without any\n additional synchronization."]
+    pub external_texture_frame_callback: FlutterVulkanTextureFrameCallback,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
     ["Size of FlutterVulkanRendererConfig"]
-        [::std::mem::size_of::<FlutterVulkanRendererConfig>() - 112usize];
+        [::std::mem::size_of::<FlutterVulkanRendererConfig>() - 120usize];
     ["Alignment of FlutterVulkanRendererConfig"]
         [::std::mem::align_of::<FlutterVulkanRendererConfig>() - 8usize];
     ["Offset of field: FlutterVulkanRendererConfig::struct_size"]
@@ -1013,6 +1064,10 @@ const _: () = {
         [::std::mem::offset_of!(FlutterVulkanRendererConfig, get_next_image_callback) - 96usize];
     ["Offset of field: FlutterVulkanRendererConfig::present_image_callback"]
         [::std::mem::offset_of!(FlutterVulkanRendererConfig, present_image_callback) - 104usize];
+    ["Offset of field: FlutterVulkanRendererConfig::external_texture_frame_callback"][::std::mem::offset_of!(
+        FlutterVulkanRendererConfig,
+        external_texture_frame_callback
+    ) - 112usize];
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1050,7 +1105,7 @@ pub union FlutterRendererConfig__bindgen_ty_1 {
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
     ["Size of FlutterRendererConfig__bindgen_ty_1"]
-        [::std::mem::size_of::<FlutterRendererConfig__bindgen_ty_1>() - 112usize];
+        [::std::mem::size_of::<FlutterRendererConfig__bindgen_ty_1>() - 120usize];
     ["Alignment of FlutterRendererConfig__bindgen_ty_1"]
         [::std::mem::align_of::<FlutterRendererConfig__bindgen_ty_1>() - 8usize];
     ["Offset of field: FlutterRendererConfig__bindgen_ty_1::open_gl"]
@@ -1064,7 +1119,7 @@ const _: () = {
 };
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of FlutterRendererConfig"][::std::mem::size_of::<FlutterRendererConfig>() - 120usize];
+    ["Size of FlutterRendererConfig"][::std::mem::size_of::<FlutterRendererConfig>() - 128usize];
     ["Alignment of FlutterRendererConfig"]
         [::std::mem::align_of::<FlutterRendererConfig>() - 8usize];
     ["Offset of field: FlutterRendererConfig::type_"]
@@ -1620,7 +1675,7 @@ const _: () = {
     ["Offset of field: FlutterStringAttribute::type_"]
         [::std::mem::offset_of!(FlutterStringAttribute, type_) - 24usize];
 };
-#[doc = " A node that represents some semantic data.\n\n The semantics tree is maintained during the semantics phase of the pipeline\n (i.e., during PipelineOwner.flushSemantics), which happens after\n compositing. Updates are then pushed to embedders via the registered\n `FlutterUpdateSemanticsCallback`.\n\n @deprecated     Use `FlutterSemanticsNode2` instead. In order to preserve\n                 ABI compatibility for existing users, no new fields will be\n                 added to this struct. New fields will continue to be added\n                 to `FlutterSemanticsNode2`."]
+#[doc = " A node that represents some semantic data.\n\n The semantics tree is maintained during the semantics phase of the pipeline\n (i.e., during PipelineOwner.flushSemantics), which happens after\n compositing. Updates are then pushed to embedders via the registered\n `FlutterUpdateSemanticsCallback`.\n\n @deprecated     Use `FlutterSemanticsNode2` instead. In order to preserve\n                 ABI compatibility for existing users, no new fields will be\n                 added to this struct. New fields will continue to be added\n                 to `FlutterSemanticsNode2`.\n"]
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct FlutterSemanticsNode {
@@ -1914,7 +1969,7 @@ const _: () = {
     ["Offset of field: FlutterSemanticsNode2::identifier"]
         [::std::mem::offset_of!(FlutterSemanticsNode2, identifier) - 384usize];
 };
-#[doc = " A custom semantics action, or action override.\n\n Custom actions can be registered by applications in order to provide\n semantic actions other than the standard actions available through the\n `FlutterSemanticsAction` enum.\n\n Action overrides are custom actions that the application developer requests\n to be used in place of the standard actions in the `FlutterSemanticsAction`\n enum.\n\n @deprecated     Use `FlutterSemanticsCustomAction2` instead. In order to\n                 preserve ABI compatility for existing users, no new fields\n                 will be added to this struct. New fields will continue to\n                 be added to `FlutterSemanticsCustomAction2`."]
+#[doc = " A custom semantics action, or action override.\n\n Custom actions can be registered by applications in order to provide\n semantic actions other than the standard actions available through the\n `FlutterSemanticsAction` enum.\n\n Action overrides are custom actions that the application developer requests\n to be used in place of the standard actions in the `FlutterSemanticsAction`\n enum.\n\n @deprecated     Use `FlutterSemanticsCustomAction2` instead. In order to\n                 preserve ABI compatility for existing users, no new fields\n                 will be added to this struct. New fields will continue to\n                 be added to `FlutterSemanticsCustomAction2`.\n"]
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct FlutterSemanticsCustomAction {
@@ -3195,6 +3250,10 @@ unsafe extern "C" {
         port: FlutterEngineDartPort,
         object: *const FlutterEngineDartObject,
     ) -> FlutterEngineResult;
+}
+unsafe extern "C" {
+    #[doc = " @brief      Posts a low memory notification to a running engine instance.\n             The engine will do its best to release non-critical resources in\n             response. It is not guaranteed that the resource would have been\n             collected by the time this call returns however. The\n             notification is posted to engine subsystems that may be\n             operating on other threads.\n\n             Flutter applications can respond to these notifications by\n             setting `WidgetsBindingObserver.didHaveMemoryPressure`\n             observers.\n\n @param[in]  engine     A running engine instance.\n\n @return     If the low memory notification was sent to the running engine\n             instance.\n"]
+    pub fn FlutterEngineNotifyLowMemoryWarning(engine: FlutterEngine) -> FlutterEngineResult;
 }
 unsafe extern "C" {
     #[doc = " @brief      Schedule a new frame to redraw the content.\n\n @param[in]  engine     A running engine instance.\n\n @return the result of the call made to the engine.\n"]
